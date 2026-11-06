@@ -1,0 +1,93 @@
+<!DOCTYPE html>
+<html lang="ko">
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no" />
+  <title>행복만빵 마을</title>
+  <link rel="stylesheet" href="style.css" />
+</head>
+<body>
+
+  <!-- ========== 입장 화면 ========== -->
+  <div id="entry" class="screen">
+    <div class="entry-card">
+      <h1 class="logo">🍞 행복만빵 마을</h1>
+      <p class="entry-sub">닉네임과 빵 친구를 고르고 마을에 들어와요.</p>
+
+      <!-- 1. 닉네임 -->
+      <label class="field-label" for="nickname">이름 (2~8자)</label>
+      <input id="nickname" type="text" maxlength="8" placeholder="예: 딸기빵" autocomplete="off" />
+      <p id="nameHint" class="hint"></p>
+
+      <!-- 2. 빵 캐릭터 고르기 -->
+      <label class="field-label">빵 친구 고르기</label>
+      <div id="breadPicker" class="picker"></div>
+
+      <!-- 3. 색 고르기 -->
+      <label class="field-label">색 고르기</label>
+      <div id="colorPicker" class="picker colors"></div>
+
+      <!-- 미리보기 -->
+      <canvas id="previewCanvas" width="160" height="160" class="preview"></canvas>
+
+      <button id="enterBtn" class="big-btn">마을에 들어가기</button>
+    </div>
+  </div>
+
+  <!-- ========== 마을(게임) 화면 ========== -->
+  <div id="village" class="screen hidden">
+    <canvas id="game"></canvas>
+
+    <!-- 상단 공지 말풍선 (가짜 데이터) -->
+    <div id="notice" class="notice">📢 행복만빵 마을에 온 걸 환영해요!</div>
+
+    <!-- 연결 상태 (가짜) -->
+    <div id="connStatus" class="conn hidden">마을과 연결 중이에요…</div>
+
+    <!-- 오른쪽 위 버튼들 -->
+    <div class="top-right">
+      <button id="bagBtn" class="round-btn" title="소품함">🎒</button>
+    </div>
+
+    <!-- 왼쪽 아래 방향 버튼 -->
+    <div id="dpad" class="dpad">
+      <button class="dbtn up" data-dir="up">▲</button>
+      <button class="dbtn left" data-dir="left">◀</button>
+      <button class="dbtn right" data-dir="right">▶</button>
+      <button class="dbtn down" data-dir="down">▼</button>
+    </div>
+
+    <!-- 시설 문 앞에 서면 나오는 들어가기 버튼 -->
+    <button id="facilityEnterBtn" class="enter-btn hidden">🚪 들어가기</button>
+
+    <!-- 안내 문구 -->
+    <div class="help-tip">방향키 · 버튼 · 지도를 눌러 걸어가요</div>
+  </div>
+
+  <!-- ========== 시설 카드 ========== -->
+  <div id="facilityCard" class="modal hidden">
+    <div class="card">
+      <button class="close-x" id="closeCard">✕</button>
+      <div id="cardIcon" class="card-icon">🏠</div>
+      <h2 id="cardTitle">시설 이름</h2>
+      <p id="cardTask">오늘 할 일이 여기 보여요.</p>
+      <a id="cardLink" class="big-btn link-btn" href="#" target="_blank" rel="noopener">열어보기</a>
+    </div>
+  </div>
+
+  <!-- ========== 소품함 ========== -->
+  <div id="bag" class="modal hidden">
+    <div class="card">
+      <button class="close-x" id="closeBag">✕</button>
+      <h2>🎒 내 소품함</h2>
+      <p class="bag-sub">소품을 누르면 꾸며져요. 한 번 더 누르면 원래 모습이 돼요. (한 번에 하나만)</p>
+      <div id="propList" class="prop-list"></div>
+    </div>
+  </div>
+
+  <!-- 알림 토스트 -->
+  <div id="toast" class="toast hidden"></div>
+
+  <script src="app.js"></script>
+</body>
+</html>

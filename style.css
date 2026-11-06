@@ -1,0 +1,444 @@
+/* ============================================
+   행복만빵 마을 - 스타일
+   따뜻한 베이커리 파스텔: 크림, 버터노랑, 딸기분홍, 초코갈색, 민트
+   ============================================ */
+
+:root {
+  --cream: #FFF4E0;
+  --cream-dark: #F6E3C2;
+  --butter: #F6C244;
+  --butter-light: #FFD66B;
+  --pink: #F77C9A;
+  --pink-light: #FFC2D1;
+  --choco: #5B3A1E;
+  --choco-light: #8A5A33;
+  --mint: #9FDCC2;
+  --white: #FFFFFF;
+}
+
+* { margin: 0; padding: 0; box-sizing: border-box; }
+
+html, body {
+  width: 100%;
+  height: 100%;
+  overflow: hidden;
+  font-family: "Pretendard", "Apple SD Gothic Neo", "Malgun Gothic", sans-serif;
+  background: var(--cream);
+  -webkit-user-select: none;
+  user-select: none;
+  touch-action: manipulation;
+}
+
+.screen {
+  position: fixed;
+  inset: 0;
+}
+
+.hidden { display: none !important; }
+
+/* ============ 입장 화면 ============ */
+#entry {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  background:
+    radial-gradient(circle at 20% 20%, #FFE9BF 0 12%, transparent 12.5%),
+    radial-gradient(circle at 80% 30%, #FFD9E3 0 10%, transparent 10.5%),
+    radial-gradient(circle at 70% 80%, #D7F2E5 0 11%, transparent 11.5%),
+    radial-gradient(circle at 15% 75%, #FFE9BF 0 9%, transparent 9.5%),
+    var(--cream);
+  overflow-y: auto;
+  padding: 20px;
+}
+
+.entry-card {
+  width: 100%;
+  max-width: 420px;
+  background: var(--white);
+  border: 4px solid var(--choco);
+  border-radius: 24px;
+  box-shadow: 0 10px 0 rgba(91, 58, 30, 0.25);
+  padding: 28px 24px 24px;
+  text-align: center;
+  margin: auto;
+}
+
+.logo {
+  font-size: 34px;
+  color: var(--choco);
+  letter-spacing: 1px;
+  margin-bottom: 6px;
+}
+
+.entry-sub {
+  font-size: 16px;
+  color: var(--choco-light);
+  margin-bottom: 20px;
+}
+
+.field-label {
+  display: block;
+  text-align: left;
+  font-size: 17px;
+  font-weight: 700;
+  color: var(--choco);
+  margin: 16px 0 8px;
+}
+
+#nickname {
+  width: 100%;
+  font-size: 22px;
+  padding: 12px 14px;
+  border: 3px solid var(--choco);
+  border-radius: 14px;
+  background: var(--cream);
+  color: var(--choco);
+  outline: none;
+  text-align: center;
+}
+#nickname:focus { border-color: var(--butter); background: var(--white); }
+
+.hint {
+  min-height: 20px;
+  font-size: 14px;
+  color: var(--pink);
+  margin-top: 6px;
+  text-align: left;
+}
+
+/* 캐릭터 / 색 선택 */
+.picker {
+  display: grid;
+  grid-template-columns: repeat(6, 1fr);
+  gap: 8px;
+}
+
+.pick-btn {
+  aspect-ratio: 1;
+  border: 3px solid var(--cream-dark);
+  border-radius: 14px;
+  background: var(--cream);
+  cursor: pointer;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  padding: 2px;
+  transition: transform 0.08s;
+}
+.pick-btn canvas { width: 100%; height: 100%; }
+.pick-btn:active { transform: scale(0.92); }
+.pick-btn.selected {
+  border-color: var(--choco);
+  background: var(--butter-light);
+  box-shadow: 0 3px 0 rgba(91, 58, 30, 0.3);
+}
+
+.colors .pick-btn { border-radius: 50%; }
+.color-dot {
+  width: 70%;
+  height: 70%;
+  border-radius: 50%;
+  border: 3px solid rgba(0, 0, 0, 0.25);
+}
+
+.preview {
+  display: block;
+  margin: 18px auto 6px;
+  width: 140px;
+  height: 140px;
+  image-rendering: pixelated;
+  background: var(--cream);
+  border: 3px dashed var(--cream-dark);
+  border-radius: 18px;
+}
+
+/* 큰 버튼 */
+.big-btn {
+  display: block;
+  width: 100%;
+  margin-top: 14px;
+  padding: 16px;
+  font-size: 22px;
+  font-weight: 800;
+  font-family: inherit;
+  color: var(--choco);
+  background: var(--butter);
+  border: 4px solid var(--choco);
+  border-radius: 18px;
+  box-shadow: 0 6px 0 rgba(91, 58, 30, 0.35);
+  cursor: pointer;
+}
+.big-btn:active { transform: translateY(4px); box-shadow: 0 2px 0 rgba(91, 58, 30, 0.35); }
+
+/* ============ 마을 화면 ============ */
+#village { background: #87b864; }
+
+#game {
+  display: block;
+  width: 100%;
+  height: 100%;
+  image-rendering: pixelated;
+  cursor: pointer;
+}
+
+/* 상단 공지 */
+.notice {
+  position: absolute;
+  top: 14px;
+  left: 50%;
+  transform: translateX(-50%);
+  max-width: min(90%, 560px);
+  background: var(--white);
+  border: 3px solid var(--choco);
+  border-radius: 999px;
+  padding: 10px 22px;
+  font-size: 17px;
+  font-weight: 700;
+  color: var(--choco);
+  box-shadow: 0 4px 0 rgba(91, 58, 30, 0.3);
+  text-align: center;
+  pointer-events: none;
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
+}
+
+.conn {
+  position: absolute;
+  top: 64px;
+  left: 50%;
+  transform: translateX(-50%);
+  font-size: 13px;
+  color: var(--choco-light);
+  background: rgba(255, 255, 255, 0.85);
+  border-radius: 999px;
+  padding: 4px 12px;
+  pointer-events: none;
+}
+
+/* 오른쪽 위 버튼 */
+.top-right {
+  position: absolute;
+  top: 14px;
+  right: 14px;
+  display: flex;
+  gap: 10px;
+}
+
+.round-btn {
+  width: 58px;
+  height: 58px;
+  font-size: 28px;
+  border: 4px solid var(--choco);
+  border-radius: 50%;
+  background: var(--white);
+  box-shadow: 0 5px 0 rgba(91, 58, 30, 0.35);
+  cursor: pointer;
+}
+.round-btn:active { transform: translateY(3px); box-shadow: 0 2px 0 rgba(91, 58, 30, 0.35); }
+
+/* 방향 버튼 (D-pad): 구석에 작게 모은다 (간판을 가리지 않게) */
+.dpad {
+  position: absolute;
+  left: 10px;
+  bottom: 10px;
+  width: 144px;
+  height: 144px;
+}
+
+.dbtn {
+  position: absolute;
+  width: 46px;
+  height: 46px;
+  font-size: 18px;
+  color: var(--choco);
+  background: rgba(255, 255, 255, 0.82);
+  border: 3px solid var(--choco);
+  border-radius: 12px;
+  box-shadow: 0 3px 0 rgba(91, 58, 30, 0.35);
+  cursor: pointer;
+  touch-action: none;
+}
+.dbtn:active { transform: translateY(3px); box-shadow: 0 1px 0 rgba(91, 58, 30, 0.35); background: var(--butter-light); }
+.dbtn.up    { left: 49px; top: 0; }
+.dbtn.left  { left: 0;    top: 49px; }
+.dbtn.right { left: 98px; top: 49px; }
+.dbtn.down  { left: 49px; top: 98px; }
+
+/* 시설 문 앞 들어가기 버튼 (건물 지붕 위에 뜬다) */
+.enter-btn {
+  position: absolute;
+  transform: translate(-50%, -100%);
+  z-index: 10;
+  font-family: inherit;
+  font-size: 21px;
+  font-weight: 800;
+  color: var(--choco);
+  background: var(--butter);
+  border: 4px solid var(--choco);
+  border-radius: 999px;
+  padding: 12px 26px;
+  box-shadow: 0 5px 0 rgba(91, 58, 30, 0.35);
+  cursor: pointer;
+  animation: enter-pop 0.18s ease-out;
+  white-space: nowrap;
+}
+.enter-btn:active { transform: translate(-50%, calc(-100% + 3px)); box-shadow: 0 2px 0 rgba(91, 58, 30, 0.35); }
+.enter-btn.closed {
+  background: #E8E0D2;
+  color: #8C8475;
+  cursor: default;
+  pointer-events: none;
+}
+
+@keyframes enter-pop {
+  from { opacity: 0; transform: translate(-50%, calc(-100% + 10px)); }
+  to   { opacity: 1; transform: translate(-50%, -100%); }
+}
+
+.help-tip {
+  position: absolute;
+  bottom: 14px;
+  right: 14px;
+  font-size: 14px;
+  color: var(--white);
+  background: rgba(91, 58, 30, 0.65);
+  border-radius: 999px;
+  padding: 7px 14px;
+  pointer-events: none;
+  transition: opacity 0.8s;
+}
+.help-tip.fade-out { opacity: 0; }
+
+/* ============ 모달 (시설 카드 / 소품함) ============ */
+.modal {
+  position: fixed;
+  inset: 0;
+  background: rgba(60, 40, 20, 0.45);
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  z-index: 50;
+  padding: 20px;
+}
+
+.card {
+  position: relative;
+  width: 100%;
+  max-width: 400px;
+  background: var(--white);
+  border: 4px solid var(--choco);
+  border-radius: 24px;
+  box-shadow: 0 10px 0 rgba(91, 58, 30, 0.3);
+  padding: 30px 24px 24px;
+  text-align: center;
+}
+
+.card h2 { font-size: 26px; color: var(--choco); margin-bottom: 10px; }
+
+.card-icon { font-size: 52px; margin-bottom: 8px; }
+
+#cardTask {
+  white-space: pre-line;
+  font-size: 18px;
+  line-height: 1.6;
+  color: var(--choco-light);
+  background: var(--cream);
+  border-radius: 14px;
+  padding: 14px;
+  margin-bottom: 6px;
+}
+
+.link-btn { text-decoration: none; }
+
+.close-x {
+  position: absolute;
+  top: 10px;
+  right: 12px;
+  width: 42px;
+  height: 42px;
+  font-size: 20px;
+  font-weight: 800;
+  color: var(--choco);
+  background: var(--cream);
+  border: 3px solid var(--choco);
+  border-radius: 50%;
+  cursor: pointer;
+}
+.close-x:active { background: var(--pink-light); }
+
+/* 소품함 */
+.bag-sub { font-size: 15px; color: var(--choco-light); margin-bottom: 16px; }
+
+.prop-list {
+  display: grid;
+  grid-template-columns: repeat(3, 1fr);
+  gap: 10px;
+}
+
+.prop-btn {
+  border: 3px solid var(--cream-dark);
+  border-radius: 16px;
+  background: var(--cream);
+  padding: 12px 6px 10px;
+  cursor: pointer;
+  font-family: inherit;
+}
+.prop-btn .p-canvas {
+  width: 46px;
+  height: 46px;
+  display: block;
+  margin: 0 auto;
+  image-rendering: pixelated;
+}
+.prop-btn .p-name { font-size: 15px; font-weight: 700; color: var(--choco); display: block; margin-top: 4px; }
+.prop-btn.wearing {
+  border-color: var(--choco);
+  background: var(--butter-light);
+  box-shadow: 0 3px 0 rgba(91, 58, 30, 0.3);
+}
+.prop-btn.wearing .p-name::after {
+  content: "✔ 꾸미는 중";
+  display: block;
+  font-size: 12px;
+  margin-top: 2px;
+  color: var(--choco);
+}
+.prop-btn:active { transform: scale(0.94); }
+
+/* 토스트 알림 */
+.toast {
+  position: fixed;
+  left: 50%;
+  bottom: 90px;
+  transform: translateX(-50%);
+  background: var(--choco);
+  color: var(--white);
+  font-size: 17px;
+  font-weight: 700;
+  padding: 12px 24px;
+  border-radius: 999px;
+  box-shadow: 0 6px 16px rgba(0, 0, 0, 0.25);
+  z-index: 99;
+  pointer-events: none;
+  animation: toast-pop 0.25s ease-out;
+  max-width: 90%;
+  text-align: center;
+}
+
+@keyframes toast-pop {
+  from { opacity: 0; transform: translateX(-50%) translateY(14px); }
+  to   { opacity: 1; transform: translateX(-50%) translateY(0); }
+}
+
+/* 좁은 화면 (휴대폰) */
+@media (max-width: 480px) {
+  .logo { font-size: 28px; }
+  .dpad { width: 138px; height: 138px; }
+  .dbtn { width: 44px; height: 44px; }
+  .dbtn.up    { left: 47px; }
+  .dbtn.left  { top: 47px; }
+  .dbtn.right { left: 94px; top: 47px; }
+  .dbtn.down  { left: 47px; top: 94px; }
+  .help-tip { display: none; }
+}
