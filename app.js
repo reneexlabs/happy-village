@@ -25,7 +25,7 @@ const SAVE_KEY = "happybread_me_" + CLASS; // 반마다 따로 기억한다
 
 /* ---------- 가짜 데이터: 시설 7개 ---------- */
 const FACILITIES = [
-  { id: "plaza",   name: "마을 안내소", emoji: "🏠", open: true,
+  { id: "plaza",   name: "마을 사무소", emoji: "🏠", open: true,
     task: "마을에 온 걸 환영해요!\n오늘의 공지를 확인해요.", link: "",
     roof: "#F77C9A", wall: "#FBEFD7", c0: 21, r0: 8 },
   { id: "cake",    name: "케이크 공방", emoji: "🎂", open: true,
@@ -46,6 +46,9 @@ const FACILITIES = [
   { id: "studio",  name: "마을 방송국", emoji: "📺", open: false,
     task: "홍보 영상을 만들어요.", link: "",
     roof: "#F77C9A", wall: "#FBEFD7", c0: 31, r0: 24 },
+  { id: "board",   name: "마을 게시판", emoji: "📌", open: true,
+    task: "여기에 중요한 공지를 적어요.", link: "",
+    board: true, c0: 27, r0: 9, w: 2, h: 3 },
 ];
 // 시설 건물 크기: 가로 5칸, 세로 4칸. 문 앞 칸 = (c0+2, r0+4)
 
@@ -130,13 +133,17 @@ for (const [c, r] of TREES) blocked[r][c] = true;
 
 // 건물 자리 막기 + 문 앞 칸 기록
 for (const f of FACILITIES) {
-  for (let r = f.r0; r < f.r0 + 4; r++)
-    for (let c = f.c0; c < f.c0 + 5; c++) blocked[r][c] = true;
-  f.doorC = f.c0 + 2;           // 문 앞 칸
-  f.doorR = f.r0 + 4;
-  // 화면에서 건물이 차지하는 영역(클릭 판정용)
-  f.rect = { x: f.c0 * TILE - 12, y: f.r0 * TILE - 48, w: 224, h: 208 };
-  f.baseY = (f.r0 + 4) * TILE;  // 그리는 순서 정하기용
+  f.w = f.w || 5; f.h = f.h || 4; // 건물은 5x4칸, 게시판은 2x3칸
+  for (let r = f.r0; r < f.r0 + f.h; r++)
+    for (let c = f.c0; c < f.c0 + f.w; c++) blocked[r][c] = true;
+  // 화면에서 차지하는 영역(클릭 판정용)
+  if (f.board) f.rect = { x: f.c0 * TILE - 8, y: (f.r0 + f.h) * TILE - 128, w: 96, h: 128 };
+  else f.rect = { x: f.c0 * TILE - 12, y: f.r0 * TILE - 48, w: 224, h: 208 };
+  f.doorC = f.c0 + Math.floor(f.w / 2);              // 문 앞 칸
+  f.doorR = f.r0 + f.h;
+  f.doorX = f.rect.x + f.rect.w / 2;                 // 문 앞 기준점(px)
+  f.doorY = (f.doorR + 0.5) * TILE;
+  f.baseY = (f.r0 + f.h) * TILE;                     // 그리는 순서 정하기용
 }
 
 const isBlocked = (c, r) => (c < 0 || r < 0 || c >= COLS || r >= ROWS) ? true : blocked[r][c];
@@ -365,6 +372,96 @@ function propIcon(id) {
   return cv;
 }
 
+/* ---------- 화면 아이콘 (이모지 대신 코드로 그린 도트 그림) ---------- */
+const uiIconCache = {};
+function uiIcon(name) {
+  if (uiIconCache[name]) return uiIconCache[name];
+  const cv = document.createElement("canvas");
+  cv.width = 16; cv.height = 16;
+  const x = cv.getContext("2d");
+  const O = OUTLINE;
+  const box = (c, r, w, h, col) => { x.fillStyle = col; x.fillRect(c, r, w, h); };
+
+  if (name === "door") { // 들어가기
+    box(4, 3, 8, 11, "#8A5A33");
+    box(5, 2, 6, 1, "#8A5A33");
+    box(5, 3, 1, 11, "#A96A4D");
+    box(10, 8, 1, 2, "#F6C244"); // 손잡이
+    box(3, 3, 1, 11, O); box(12, 3, 1, 11, O); box(4, 2, 1, 1, O); box(11, 2, 1, 1, O);
+    box(5, 1, 6, 1, O); box(4, 14, 8, 1, O);
+  } else if (name === "pin") { // 게시판 압정
+    box(5, 3, 6, 5, "#E8453C"); box(4, 4, 8, 3, "#E8453C");
+    box(5, 4, 2, 1, "#F58A7E");
+    box(4, 3, 1, 1, O); box(11, 3, 1, 1, O); box(3, 4, 1, 3, O); box(12, 4, 1, 3, O);
+    box(5, 2, 6, 1, O); box(5, 8, 6, 1, O);
+    box(7, 9, 2, 4, "#8C8CA0"); box(7, 13, 2, 1, O); box(6, 9, 1, 4, O); box(9, 9, 1, 4, O);
+  } else if (name === "cone") { // 준비 중 고깔
+    for (let r = 3; r < 12; r++) { const half = 1 + Math.floor((r - 3) * 0.55); box(8 - half, r, half * 2, 1, r === 7 || r === 8 ? "#FFFFFF" : "#F2823C"); }
+    box(3, 12, 10, 2, "#F2823C");
+    box(2, 12, 1, 2, O); box(13, 12, 1, 2, O); box(3, 14, 10, 1, O); box(3, 11, 1, 1, O); box(12, 11, 1, 1, O);
+    box(7, 2, 2, 1, O);
+  } else if (name === "shake") { // 흔들기(작은 나무)
+    box(4, 3, 8, 6, "#79B868"); box(3, 4, 10, 4, "#79B868"); box(4, 3, 4, 2, "#8FCB7C");
+    box(7, 9, 2, 5, "#8A5A33");
+    box(2, 4, 1, 4, O); box(13, 4, 1, 4, O); box(4, 2, 8, 1, O); box(4, 9, 3, 1, O); box(9, 9, 3, 1, O);
+    box(6, 9, 1, 5, O); box(9, 9, 1, 5, O); box(7, 14, 2, 1, O);
+  } else if (name === "scoop") { // 건지기(양동이)
+    box(4, 6, 8, 7, "#8C8CA0"); box(4, 6, 8, 2, "#7EC8DF");
+    box(5, 8, 1, 4, "#A8A8BC");
+    box(3, 6, 1, 7, O); box(12, 6, 1, 7, O); box(4, 13, 8, 1, O); box(4, 5, 8, 1, O);
+    box(5, 3, 1, 2, O); box(10, 3, 1, 2, O); box(6, 2, 4, 1, O); // 손잡이
+  } else if (name === "bag") { // 소품함
+    box(4, 5, 8, 9, "#F75E8E"); box(5, 4, 6, 1, "#F75E8E");
+    box(5, 8, 6, 3, "#FFD9E3");
+    box(5, 5, 1, 8, "#FA87AC");
+    box(3, 5, 1, 9, O); box(12, 5, 1, 9, O); box(4, 14, 8, 1, O); box(4, 4, 1, 1, O); box(11, 4, 1, 1, O); box(5, 3, 6, 1, O);
+    box(5, 8, 6, 1, O); box(5, 11, 6, 1, O);
+  } else if (name === "book") { // 재료 도감
+    box(3, 3, 10, 10, "#A96A4D");
+    box(11, 4, 2, 9, "#FFF4E0");
+    box(5, 5, 5, 1, "#FFF4E0"); box(5, 7, 5, 1, "#FFF4E0");
+    box(2, 3, 1, 10, O); box(13, 3, 1, 10, O); box(3, 2, 10, 1, O); box(3, 13, 10, 1, O);
+    box(10, 4, 1, 9, O);
+  } else if (name === "megaphone") { // 공지
+    for (let r = 4; r < 11; r++) { const half = 1 + Math.floor((r - 4) * 0.7); box(9 - half, r, half + 3, 1, "#F6C244"); }
+    box(11, 3, 2, 10, "#F2A33C");
+    box(13, 3, 1, 10, O); box(11, 2, 2, 1, O); box(11, 13, 2, 1, O);
+    box(3, 9, 3, 4, "#8A5A33"); box(2, 9, 1, 4, O); box(6, 11, 1, 2, O); box(3, 13, 3, 1, O);
+  } else if (name === "move") { // 움직이는 법 (방향 십자)
+    box(7, 2, 2, 12, "#8A5A33"); box(2, 7, 12, 2, "#8A5A33");
+    box(6, 3, 1, 1, O); box(9, 3, 1, 1, O); box(7, 1, 2, 1, O);
+    box(6, 12, 1, 1, O); box(9, 12, 1, 1, O); box(7, 14, 2, 1, O);
+    box(1, 7, 1, 2, O); box(14, 7, 1, 2, O);
+  } else if (name === "sprout") { // 쉬는 중 새싹
+    box(7, 8, 2, 5, "#58B368");
+    box(3, 6, 4, 3, "#7CC576"); box(9, 6, 4, 3, "#7CC576");
+    box(4, 5, 2, 1, "#9BDB8E"); box(10, 5, 2, 1, "#9BDB8E");
+    box(2, 6, 1, 3, O); box(13, 6, 1, 3, O); box(3, 5, 4, 1, O); box(9, 5, 4, 1, O);
+    box(3, 9, 4, 1, O); box(9, 9, 4, 1, O); box(6, 8, 1, 5, O); box(9, 8, 1, 5, O);
+    box(5, 13, 6, 2, "#8A5A33"); box(4, 13, 1, 2, O); box(11, 13, 1, 2, O); box(5, 15, 6, 1, O);
+  }
+  uiIconCache[name] = cv;
+  return cv;
+}
+
+// 스프라이트를 화면에 넣을 작은 캔버스로 복사
+function mkIcon(src, cls) {
+  const c = document.createElement("canvas");
+  c.width = src.width; c.height = src.height;
+  const x = c.getContext("2d");
+  x.imageSmoothingEnabled = false;
+  x.drawImage(src, 0, 0);
+  c.className = cls || "ui-ico";
+  return c;
+}
+
+// 버튼 내용을 "도트 아이콘 + 글자"로 채우기
+function setBtnIcon(btn, iconName, text) {
+  btn.innerHTML = "";
+  if (iconName) btn.appendChild(mkIcon(uiIcon(iconName)));
+  btn.appendChild(document.createTextNode(" " + text));
+}
+
 /* ---------- 나무 스프라이트 ---------- */
 let treeSpriteCv = null;
 function treeSprite() {
@@ -472,12 +569,30 @@ const me = {
   id: "", name: "", bread: "bun", colorIdx: 0, prop: null,
   x: 24.5 * TILE, y: 17.5 * TILE,
   path: [], moving: false,
+  items: new Set(), // 모은 재료
 };
 
 /* ---------- 친구(가짜 접속자) ---------- */
 const friends = [
   { name: "크림이", bread: "bun",       colorIdx: 1, prop: "ribbon", x: 21.5 * TILE, y: 18.5 * TILE, path: [], wanderAt: 0, homeC: 21, homeR: 18 },
   { name: "소라빵", bread: "croissant", colorIdx: 3, prop: null,     x: 27.5 * TILE, y: 18.5 * TILE, path: [], wanderAt: 0, homeC: 27, homeR: 18 },
+];
+
+/* ---------- 마을 설정(시트에서 바꿀 수 있는 값) ---------- */
+const VILLAGE_CFG = {
+  missionName: "반죽 촌장",
+  helperName: "크림 씨",
+  missionLines: ["{닉네임}님, 반가워요!", "오늘 케이크 공방이 문을 열었어요.", "고마운 사람에게 케이크를 선물해 볼래요?"],
+  missionDest: "cake",
+  gatherOpen: true,   // 재료 줍기 열림/닫힘
+  restMin: 3,         // 흔든 나무가 쉬는 시간(분)
+};
+let birthdays = [];   // 오늘 생일인 친구 닉네임
+
+/* ---------- 사무소 캐릭터 2명 ---------- */
+const NPCS = [
+  { id: "mission", name: VILLAGE_CFG.missionName, bread: "loaf", colorIdx: 4, prop: "chefhat", x: 21.5 * TILE, y: 13.6 * TILE, moving: false },
+  { id: "helper",  name: VILLAGE_CFG.helperName,  bread: "bun",  colorIdx: 1, prop: "ribbon",  x: 26.4 * TILE, y: 13.6 * TILE, moving: false },
 ];
 
 /* ============================================================
@@ -536,6 +651,7 @@ function setupEntry() {
       previewSelected.colorIdx = saved.colorIdx ?? 0;
       me.id = saved.id || "";
       me.prop = saved.prop || null;
+      me.items = new Set(saved.items || []);
     }
   } catch (e) { /* 무시 */ }
 
@@ -589,6 +705,7 @@ async function enterVillage() {
       return;
     }
     me.id = res.id;
+    if (res.items) String(res.items).split(",").forEach((it) => { if (it) me.items.add(it); });
     friends.length = 0;   // 가짜 친구 대신 진짜 친구들을 보여 준다
     startSync();
   }
@@ -596,14 +713,14 @@ async function enterVillage() {
   try {
     localStorage.setItem(SAVE_KEY, JSON.stringify({
       id: me.id, name: me.name, bread: me.bread, colorIdx: me.colorIdx, prop: me.prop,
+      items: [...me.items],
     }));
   } catch (e) { /* 무시 */ }
 
   entryEl.classList.add("hidden");
   villageEl.classList.remove("hidden");
   resize();
-  showToast(`${me.name}님, 어서 와요! 🍞`);
-  if (!ONLINE()) setTimeout(() => showToast("🎂 케이크 공방이 새로 열렸어요!"), 2500); // 혼자 보기 모드 시범용
+  showToast(`${me.name}님, 어서 와요!`); // 들어오면 인사 하나만 잠깐 뜬다
   // 안내 문구는 몇 초 뒤에 사라진다 (간판을 가리지 않게)
   setTimeout(() => {
     const tip = document.querySelector(".help-tip");
@@ -691,8 +808,23 @@ async function pollState() {
     if (firstStateDone && f.open && !wasOpen) showToast(`${f.name}이(가) 새로 열렸어요!`);
   }
 
-  // 3) 공지
-  if (st.notice) $("notice").textContent = "📢 " + st.notice;
+  // 3) 공지: 시트 내용을 그대로 보여 준다 (맨 위 말풍선으로만)
+  if (st.notice) $("noticeText").textContent = st.notice;
+
+  // 4) 마을 설정(사무소 캐릭터 이름, 미션, 재료 줍기)과 생일
+  if (st.village) {
+    const v = st.village;
+    if (v.missionName) { VILLAGE_CFG.missionName = v.missionName; NPCS[0].name = v.missionName; }
+    if (v.helperName) { VILLAGE_CFG.helperName = v.helperName; NPCS[1].name = v.helperName; }
+    if (Array.isArray(v.missionLines)) {
+      const lines = v.missionLines.map((s) => String(s || "").trim()).filter(Boolean);
+      if (lines.length) VILLAGE_CFG.missionLines = lines;
+    }
+    if (v.missionDest) VILLAGE_CFG.missionDest = String(v.missionDest).trim();
+    VILLAGE_CFG.gatherOpen = v.gatherOpen !== false;
+    if (Number(v.restMin) > 0) VILLAGE_CFG.restMin = Number(v.restMin);
+  }
+  birthdays = st.birthdays || [];
 
   firstStateDone = true;
 }
@@ -760,13 +892,20 @@ const KEYMAP = {
 window.addEventListener("keydown", (e) => {
   if (!villageEl || villageEl.classList.contains("hidden")) return;
   const dir = KEYMAP[e.key];
-  if (dir) { keys[dir] = true; me.path = []; pendingFacility = null; e.preventDefault(); }
+  if (dir) { keys[dir] = true; me.path = []; pendingFacility = null; pendingNpc = null; e.preventDefault(); }
   if (e.key === "Escape") { closeModals(); }
-  // 문 앞에서 스페이스바나 엔터로도 들어갈 수 있다
-  if ((e.key === " " || e.key === "Enter") && nearFacility &&
-      $("facilityCard").classList.contains("hidden") && $("bag").classList.contains("hidden")) {
+  if (e.key !== " " && e.key !== "Enter") return;
+  // 대화창이 열려 있으면 스페이스바/엔터로 다음 문장
+  if (!$("dialog").classList.contains("hidden")) {
     e.preventDefault();
-    if (nearFacility.open) openFacilityCard(nearFacility);
+    if (dialog && dialog.idx >= dialog.lines.length - 1) $("dialogGo").click();
+    else advanceDialog();
+    return;
+  }
+  // 문 앞에서 스페이스바나 엔터로도 들어갈 수 있다
+  if (nearFacility && noModalOpen()) {
+    e.preventDefault();
+    if (nearFacility.open) openFacility(nearFacility);
     else showToast(`${nearFacility.name}은(는) 아직 준비 중이에요.`);
   }
 });
@@ -778,7 +917,7 @@ window.addEventListener("keyup", (e) => {
 // 방향 버튼
 document.querySelectorAll(".dbtn").forEach((btn) => {
   const dir = btn.dataset.dir;
-  const on = (e) => { e.preventDefault(); keys[dir] = true; me.path = []; pendingFacility = null; };
+  const on = (e) => { e.preventDefault(); keys[dir] = true; me.path = []; pendingFacility = null; pendingNpc = null; };
   const off = (e) => { e.preventDefault(); keys[dir] = false; };
   btn.addEventListener("pointerdown", on);
   btn.addEventListener("pointerup", off);
@@ -795,7 +934,7 @@ function updateEnterButton() {
   const btn = $("facilityEnterBtn");
   let best = null, bestD = Infinity;
   for (const f of FACILITIES) {
-    const d = Math.hypot(me.x - (f.doorC + 0.5) * TILE, me.y - (f.doorR + 0.5) * TILE);
+    const d = Math.hypot(me.x - f.doorX, me.y - f.doorY);
     if (d < bestD) { bestD = d; best = f; }
   }
   // 나타날 때와 사라질 때 거리를 다르게 해서 깜빡임을 막는다
@@ -806,17 +945,19 @@ function updateEnterButton() {
   }
   if (nearFacility !== best || btn.classList.contains("hidden")) {
     nearFacility = best;
-    btn.textContent = best.open ? "🚪 들어가기" : "🚧 준비 중이에요";
+    if (!best.open) setBtnIcon(btn, "cone", "준비 중이에요");
+    else if (best.board) setBtnIcon(btn, "pin", "게시판 보기");
+    else setBtnIcon(btn, "door", "들어가기");
     btn.classList.toggle("closed", !best.open);
     btn.classList.remove("hidden");
   }
   // 건물 지붕 위, 문 가운데 자리에 띄운다
-  btn.style.left = ((best.doorC + 0.5) * TILE - cam.x) + "px";
+  btn.style.left = (best.doorX - cam.x) + "px";
   btn.style.top = (best.rect.y - cam.y - 8) + "px";
 }
 
 $("facilityEnterBtn").addEventListener("click", () => {
-  if (nearFacility && nearFacility.open) openFacilityCard(nearFacility);
+  if (nearFacility && nearFacility.open) openFacility(nearFacility);
 });
 
 // 지도 클릭 → 걸어가기 / 시설 열기
@@ -830,8 +971,17 @@ canvas.addEventListener("pointerup", (e) => {
   const moved = Math.hypot(e.clientX - downPos[0], e.clientY - downPos[1]);
   downPos = null;
   if (moved > 10) return;
+  if (!$("dialog").classList.contains("hidden")) return; // 대화 중에는 지도를 누르지 않는다
 
   const wx = e.clientX + cam.x, wy = e.clientY + cam.y;
+
+  // 사무소 캐릭터를 눌렀나?
+  for (const npc of NPCS) {
+    if (Math.abs(wx - npc.x) < 38 && wy > npc.y - 80 && wy < npc.y + 14) {
+      clickNpc(npc);
+      return;
+    }
+  }
 
   // 건물을 눌렀나?
   for (const f of FACILITIES) {
@@ -851,6 +1001,7 @@ function walkTo(c, r, facility) {
   const path = findPath(pc, pr, c, r);
   me.path = path;
   pendingFacility = facility;
+  pendingNpc = null;
   if (path.length) {
     const last = path[path.length - 1];
     walkMarker = { x: last[0] * TILE + TILE / 2, y: last[1] * TILE + TILE / 2, t: performance.now() };
@@ -859,12 +1010,30 @@ function walkTo(c, r, facility) {
 
 function clickFacility(f) {
   if (!f.open) { showToast(`${f.name}은(는) 아직 준비 중이에요.`); return; }
-  const doorX = (f.doorC + 0.5) * TILE, doorY = (f.doorR + 0.5) * TILE;
-  if (Math.hypot(me.x - doorX, me.y - doorY) < TILE * 2.2) {
-    openFacilityCard(f);
+  if (Math.hypot(me.x - f.doorX, me.y - f.doorY) < TILE * 2.2) {
+    openFacility(f);
   } else {
     walkTo(f.doorC, f.doorR, f); // 문 앞까지 걸어가서 열기
   }
+}
+
+// 시설 열기: 사무소는 미션 대화, 게시판은 게시판 창, 나머지는 시설 카드
+function openFacility(f, asMission) {
+  if (f.id === "plaza") { startMissionDialog(); return; }
+  if (f.board) openBoard(f);
+  else openFacilityCard(f, asMission);
+}
+
+function clickNpc(npc) {
+  if (Math.hypot(me.x - npc.x, me.y - npc.y) < TILE * 2.5) { openNpc(npc); return; }
+  walkTo(Math.floor(npc.x / TILE), Math.floor(npc.y / TILE) + 1, null); // 멀면 옆까지 걸어간다
+  pendingNpc = npc;
+}
+
+function openNpc(npc) {
+  pendingNpc = null;
+  if (npc.id === "mission") startMissionDialog();
+  else openHelper();
 }
 
 /* ============================================================
@@ -872,18 +1041,121 @@ function clickFacility(f) {
    ============================================================ */
 let currentLink = "";
 
-function openFacilityCard(f) {
-  $("cardIcon").textContent = f.emoji;
-  $("cardTitle").textContent = f.name;
+function openFacilityCard(f, asMission) {
+  // 카드 아이콘: 이모지 대신 그 시설의 도트 그림
+  const slot = $("cardIcon");
+  slot.innerHTML = "";
+  slot.appendChild(mkIcon(f.board ? boardSprite() : buildingSprite(f), "card-ico"));
+  $("cardTitle").textContent = asMission ? "오늘의 미션" : f.name;
   $("cardTask").textContent = f.task;
   currentLink = f.link || "";
   const btn = $("cardLink");
+  btn.textContent = asMission ? "만들러 가기" : "열어보기";
   btn.classList.toggle("hidden", !currentLink); // 링크가 없으면 버튼을 숨긴다
   if (currentLink) btn.href = currentLink;
   $("facilityCard").classList.remove("hidden");
 }
 
 $("closeCard").addEventListener("click", () => $("facilityCard").classList.add("hidden"));
+
+/* ---------- 마을 게시판 창 ---------- */
+function openBoard(f) {
+  $("boardNotice").textContent = f.task || "아직 공지가 없어요.";
+  // 오늘 마을에 온 친구: 지금 받고 있는 접속자 명단으로
+  const names = [me.name, ...friends.map((fr) => fr.name)].filter(Boolean);
+  $("boardFriendsTitle").textContent = `오늘 마을에 온 친구 (${names.length}명)`;
+  $("boardFriends").textContent = names.join(", ");
+  const bd = $("boardBday");
+  if (birthdays.length) {
+    bd.textContent = birthdays.map((n) => `오늘은 ${n}님의 생일이에요 🎂`).join("\n");
+    bd.style.whiteSpace = "pre-line";
+    bd.classList.remove("hidden");
+  } else {
+    bd.classList.add("hidden");
+  }
+  const lb = $("boardLink");
+  lb.classList.toggle("hidden", !f.link);
+  if (f.link) lb.href = f.link;
+  $("board").classList.remove("hidden");
+}
+$("closeBoard").addEventListener("click", () => $("board").classList.add("hidden"));
+
+/* ============================================================
+   사무소 캐릭터: 오늘의 미션 대화 / 도우미 설명
+   ============================================================ */
+let pendingNpc = null;
+let dialog = null;          // { lines: [], idx: 0 }
+let missionTarget = null;   // 화살표가 가리키는 시설
+const MISSION_SEEN_KEY = "happybread_missionday_" + CLASS;
+
+function todayStr() {
+  const d = new Date();
+  return d.getFullYear() + "-" + (d.getMonth() + 1) + "-" + d.getDate();
+}
+function noModalOpen() { return !document.querySelector(".modal:not(.hidden)"); }
+
+function startMissionDialog() {
+  const lines = VILLAGE_CFG.missionLines.map((s) => String(s).split("{닉네임}").join(me.name));
+  dialog = { lines, idx: 0 };
+  $("dialogName").textContent = NPCS[0].name;
+  renderDialog();
+  $("dialog").classList.remove("hidden");
+  try { localStorage.setItem(MISSION_SEEN_KEY, todayStr()); } catch (e) { /* 무시 */ }
+}
+function renderDialog() {
+  $("dialogText").textContent = dialog.lines[dialog.idx];
+  const last = dialog.idx >= dialog.lines.length - 1;
+  $("dialogNext").classList.toggle("hidden", last);
+  $("dialogGo").classList.toggle("hidden", !last);
+}
+function advanceDialog() {
+  if (dialog && dialog.idx < dialog.lines.length - 1) { dialog.idx++; renderDialog(); }
+}
+$("dialogBox").addEventListener("click", (e) => { if (e.target.id !== "dialogGo") advanceDialog(); });
+$("dialogGo").addEventListener("click", () => {
+  $("dialog").classList.add("hidden");
+  dialog = null;
+  const dest = FACILITIES.find((f) => f.id === VILLAGE_CFG.missionDest);
+  if (dest) { missionTarget = dest; showToast("화살표를 따라가 봐요!"); }
+});
+
+function updateMission() {
+  // 그날 처음 사무소 캐릭터 가까이 가면 대화가 저절로 시작된다
+  if (!dialog && $("dialog").classList.contains("hidden") && noModalOpen()) {
+    let seen = "";
+    try { seen = localStorage.getItem(MISSION_SEEN_KEY) || ""; } catch (e) { /* 무시 */ }
+    if (seen !== todayStr() && Math.hypot(me.x - NPCS[0].x, me.y - NPCS[0].y) < TILE * 2.4) startMissionDialog();
+  }
+  // 목적지에 도착하면 반짝 효과와 함께 미션 카드가 열린다
+  if (missionTarget && Math.hypot(me.x - missionTarget.doorX, me.y - missionTarget.doorY) < TILE * 2.2) {
+    const dest = missionTarget;
+    missionTarget = null;
+    spawnSparkle(dispX(me) - cam.x, dispY(me) - cam.y - 40, 18);
+    openFacility(dest, true);
+  }
+}
+
+/* ---------- 도우미(크림 씨) 설명 ---------- */
+const HELPER_TEXTS = {
+  move: "방향키나 화면의 방향 버튼으로 걸어요.\n가고 싶은 곳을 누르면 거기까지 걸어가요.",
+  prop: "🎒 소품함에서 소품을 누르면 꾸며져요.\n한 번 더 누르면 원래 모습이 돼요. 한 번에 하나만 꾸밀 수 있어요.",
+  gather: "나무 앞에서 [흔들기], 연못 가장자리에서 [건지기]를 눌러요.\n모은 재료는 📖 재료 도감에 모여요.",
+  photo: "📷 사진 찍기를 누르면 내 캐릭터 사진이 만들어져요.\n[저장하기]를 누르면 그림 파일로 내려받아요.",
+};
+function openHelper() {
+  const t = $("helperTitle");
+  t.textContent = " " + NPCS[1].name;
+  t.prepend(mkIcon(propIcon("ribbon")));
+  $("helperText").classList.add("hidden");
+  $("helper").classList.remove("hidden");
+}
+document.querySelectorAll(".helper-btn").forEach((b) => {
+  b.addEventListener("click", () => {
+    $("helperText").textContent = HELPER_TEXTS[b.dataset.topic] || "";
+    $("helperText").classList.remove("hidden");
+  });
+});
+$("closeHelper").addEventListener("click", () => $("helper").classList.add("hidden"));
 
 function setupBag() {
   const list = $("propList");
@@ -944,13 +1216,301 @@ function refreshBag() {
   });
 }
 
+/* ============================================================
+   재료 줍기와 재료 도감 (요구사항 5-6)
+   - 나무 앞 "흔들기", 연못 가장자리 "건지기". 꽝은 없다.
+   - 못 모은 재료가 먼저 나온다. 나무와 물가 상태는 사람마다 따로.
+   - 열림/닫힘과 쉬는 시간(분)은 시트(마을 탭)에서 바꾼다.
+   ============================================================ */
+const ITEMS = [
+  // 나무에서 (흔들기)
+  { id: "strawberry", name: "딸기",     from: "tree", shape: "drop",  c: "#E8453C", deco: "seeds" },
+  { id: "lemon",      name: "레몬",     from: "tree", shape: "egg",   c: "#F6D44C", deco: "sparkle" },
+  { id: "chestnut",   name: "밤",       from: "tree", shape: "round", c: "#9C6B3C", deco: "cap" },
+  { id: "peach",      name: "복숭아",   from: "tree", shape: "round", c: "#FFB3A7", deco: "leaf" },
+  { id: "apple",      name: "사과",     from: "tree", shape: "round", c: "#E0493F", deco: "leaf" },
+  { id: "blueberry",  name: "블루베리", from: "tree", shape: "round", c: "#6B7FD6", deco: "sparkle" },
+  { id: "cherry",     name: "체리",     from: "tree", shape: "round", c: "#C0392B", deco: "stem" },
+  { id: "walnut",     name: "호두",     from: "tree", shape: "round", c: "#B5885C", deco: "vein" },
+  { id: "honey",      name: "꿀",       from: "tree", shape: "drop",  c: "#F2A33C", deco: "sparkle" },
+  { id: "cinnamon",   name: "계피",     from: "tree", shape: "cube",  c: "#8A5A33", deco: "stripes" },
+  // 물가에서 (건지기)
+  { id: "salt",       name: "소금",       from: "pond", shape: "cube",  c: "#F4F0E6", deco: "grains" },
+  { id: "shell",      name: "조개",       from: "pond", shape: "flat",  c: "#F3D9A4", deco: "ridges" },
+  { id: "starcandy",  name: "별사탕",     from: "pond", shape: "star",  c: "#FF9FB6", deco: "sparkle" },
+  { id: "mint",       name: "민트잎",     from: "pond", shape: "egg",   c: "#8FD7BB", deco: "vein" },
+  { id: "sugar",      name: "설탕",       from: "pond", shape: "cube",  c: "#FFFFFF", deco: "sparkle" },
+  { id: "pearl",      name: "진주사탕",   from: "pond", shape: "round", c: "#EADFF2", deco: "sparkle" },
+  { id: "icecandy",   name: "얼음사탕",   from: "pond", shape: "cube",  c: "#BEE3F0", deco: "sparkle" },
+  { id: "jelly",      name: "물방울젤리", from: "pond", shape: "drop",  c: "#7EC8DF", deco: "sparkle" },
+  { id: "seaweed",    name: "미역",       from: "pond", shape: "flat",  c: "#4E8C5E", deco: "stripes" },
+  { id: "lotus",      name: "연꽃잎",     from: "pond", shape: "flat",  c: "#F7A8C4", deco: "vein" },
+];
+
+// 재료 도트 그림 (16x16, 코드로 직접 그림)
+const itemCache = {};
+function itemSprite(id) {
+  if (itemCache[id]) return itemCache[id];
+  const it = ITEMS.find((v) => v.id === id);
+  const cv = document.createElement("canvas");
+  cv.width = 16; cv.height = 16;
+  const x = cv.getContext("2d");
+  const g = Array.from({ length: 16 }, () => new Array(16).fill(0));
+  const el = (cx, cy, rx, ry) => {
+    for (let r = 0; r < 16; r++) for (let c = 0; c < 16; c++) {
+      const dx = (c - cx) / rx, dy = (r - cy) / ry;
+      if (dx * dx + dy * dy <= 1) g[r][c] = 1;
+    }
+  };
+  const rc = (c0, r0, w, h) => { for (let r = r0; r < r0 + h; r++) for (let c = c0; c < c0 + w; c++) if (g[r]) g[r][c] = 1; };
+
+  const sh = it.shape;
+  if (sh === "round") el(8, 9, 5.4, 5);
+  else if (sh === "egg") el(8, 9, 4.6, 6);
+  else if (sh === "flat") el(8, 10, 6, 3.8);
+  else if (sh === "cube") rc(4, 5, 8, 8);
+  else if (sh === "star") { rc(7, 3, 2, 10); rc(3, 7, 10, 2); rc(5, 5, 6, 6); }
+  else if (sh === "drop") {
+    el(8, 10.5, 4.6, 4.4);
+    for (let r = 3; r < 8; r++) for (let c = 0; c < 16; c++) if (Math.abs(c - 8) <= (r - 2) * 0.85) g[r][c] = 1;
+  }
+
+  const shade = shadeHex(it.c, 0.78), light = shadeHex(it.c, 1.25);
+  for (let r = 0; r < 16; r++) for (let c = 0; c < 16; c++) {
+    if (!g[r][c]) continue;
+    let col = it.c;
+    if (!((g[r + 1] || [])[c])) col = shade;
+    else if (r < 8 && c < 9 && !((g[r - 1] || [])[c] && g[r][c - 1])) col = light;
+    x.fillStyle = col; x.fillRect(c, r, 1, 1);
+  }
+  // 꾸밈
+  const px = (c, r, col) => { if (g[r] && g[r][c]) { x.fillStyle = col; x.fillRect(c, r, 1, 1); } };
+  if (it.deco === "seeds") [[6, 8], [9, 7], [8, 11], [11, 9]].forEach(([c, r]) => px(c, r, light));
+  else if (it.deco === "sparkle") { px(6, 6, "#FFFFFF"); px(10, 9, "#FFFFFF"); }
+  else if (it.deco === "cap") { for (let r = 0; r < 7; r++) for (let c = 0; c < 16; c++) px(c, r, "#6E4525"); }
+  else if (it.deco === "stripes") { for (const r of [7, 10]) for (let c = 0; c < 16; c++) px(c, r, shade); }
+  else if (it.deco === "grains") [[6, 7], [9, 9], [7, 11]].forEach(([c, r]) => px(c, r, shade));
+  else if (it.deco === "vein") { for (let r = 4; r < 14; r++) px(8, r, shade); }
+  else if (it.deco === "ridges") { for (const c of [5, 8, 11]) for (let r = 7; r < 14; r++) px(c, r, shade); }
+  else if (it.deco === "leaf") { x.fillStyle = "#58B368"; x.fillRect(9, 2, 2, 2); x.fillStyle = "#6E4525"; x.fillRect(8, 2, 1, 2); }
+  else if (it.deco === "stem") { x.fillStyle = "#6E4525"; x.fillRect(8, 1, 1, 4); x.fillStyle = "#58B368"; x.fillRect(9, 1, 2, 2); }
+  // 테두리
+  x.fillStyle = OUTLINE;
+  for (let r = 0; r < 16; r++) for (let c = 0; c < 16; c++) {
+    if (g[r][c]) continue;
+    const near = (g[r - 1] || [])[c] || (g[r + 1] || [])[c] || g[r][c - 1] || g[r][c + 1];
+    if (near) x.fillRect(c, r, 1, 1);
+  }
+  itemCache[id] = cv;
+  return cv;
+}
+
+// 흔들 수 있는 나무들
+const treeSet = new Set();
+for (const [c, r] of TREES) treeSet.add(c + "," + r);
+for (const [c, r] of borderTrees) treeSet.add(c + "," + r);
+
+const GATHER_KEY = "happybread_gather_" + CLASS;
+let cooldowns = {};
+try { cooldowns = JSON.parse(localStorage.getItem(GATHER_KEY) || "{}"); } catch (e) { /* 무시 */ }
+const shakeUntil = {};   // 나무 흔들림 효과
+let gatherSpot = null;
+let floatItem = null;    // 방금 얻은 재료가 떠오르는 효과
+
+function saveItems() {
+  try {
+    const saved = JSON.parse(localStorage.getItem(SAVE_KEY) || "{}");
+    saved.items = [...me.items];
+    localStorage.setItem(SAVE_KEY, JSON.stringify(saved));
+  } catch (e) { /* 무시 */ }
+  if (ONLINE() && me.id) api({ action: "items", class: CLASS, id: me.id, items: [...me.items].join(",") });
+}
+
+function findGatherSpot() {
+  const pc = Math.floor(me.x / TILE), pr = Math.floor(me.y / TILE);
+  let tree = null, treeD = Infinity, pondD = Infinity, pondC = 0, pondR = 0;
+  for (let r = pr - 2; r <= pr + 2; r++) {
+    for (let c = pc - 2; c <= pc + 2; c++) {
+      const d = Math.hypot(me.x - (c + 0.5) * TILE, me.y - (r + 0.5) * TILE);
+      if (treeSet.has(c + "," + r) && d < treeD) { treeD = d; tree = { type: "tree", key: "t" + c + "_" + r, c, r }; }
+      if (ground[r] && ground[r][c] === 3 && d < pondD) { pondD = d; pondC = c; pondR = r; }
+    }
+  }
+  if (tree && treeD < TILE * 2.1 && treeD <= pondD) return tree;
+  if (pondD < TILE * 1.9) return { type: "pond", key: "pond", c: pondC, r: pondR };
+  return null;
+}
+
+function coolLeft(key) { // 쉬는 중이면 남은 시간(ms), 아니면 0
+  const v = cooldowns[key];
+  const t = v ? (v.t || v) : 0;
+  return Math.max(0, t - Date.now());
+}
+
+function updateGatherButton() {
+  const btn = $("gatherBtn");
+  const spot = findGatherSpot();
+  // 쉬는 중이면 버튼을 아예 숨긴다 (새싹 표시만 보임)
+  if (!spot || coolLeft(spot.key) > 0) {
+    if (gatherSpot) { gatherSpot = null; btn.classList.add("hidden"); }
+    return;
+  }
+  if (!gatherSpot || gatherSpot.key !== spot.key || btn.classList.contains("hidden")) {
+    if (spot.type === "tree") setBtnIcon(btn, "shake", "흔들기");
+    else setBtnIcon(btn, "scoop", "건지기");
+    btn.classList.remove("closed");
+    btn.classList.remove("hidden");
+  }
+  gatherSpot = spot;
+  btn.style.left = (dispX(me) - cam.x) + "px";
+  btn.style.top = (dispY(me) - cam.y + 26) + "px";
+}
+
+// 쉬는 중인 곳에 작은 새싹 표시 (다시 열리면 사라진다)
+function drawRestingSprouts(now) {
+  const nowMs = Date.now();
+  for (const key in cooldowns) {
+    const v = cooldowns[key];
+    const t = v ? (v.t || v) : 0;
+    if (t <= nowMs) { delete cooldowns[key]; continue; }
+    if (!v || v.c === undefined) continue;
+    const sx = (v.c + 0.5) * TILE - cam.x;
+    const sy = (v.r + 1) * TILE - cam.y - 6 + Math.sin(now / 300) * 2;
+    if (sx < -30 || sy < -30 || sx > canvas.width + 30 || sy > canvas.height + 30) continue;
+    ctx.drawImage(uiIcon("sprout"), sx - 11, sy - 20, 22, 22);
+  }
+}
+
+$("gatherBtn").addEventListener("click", () => {
+  const spot = gatherSpot;
+  if (!spot) return;
+  if (!VILLAGE_CFG.gatherOpen) { showToast("지금은 쉬는 시간이에요."); return; }
+  if (coolLeft(spot.key) > 0) return;
+  // 재료 뽑기: 못 모은 재료 먼저, 꽝은 없다
+  const pool = ITEMS.filter((it) => it.from === spot.type);
+  const fresh = pool.filter((it) => !me.items.has(it.id));
+  const from = fresh.length ? fresh : pool;
+  const pick = from[Math.floor(Math.random() * from.length)];
+  const isNew = !me.items.has(pick.id);
+  me.items.add(pick.id);
+  saveItems();
+  // 이곳은 잠시 쉬는 중 (새싹 표시용 위치도 함께 기억)
+  cooldowns[spot.key] = { t: Date.now() + VILLAGE_CFG.restMin * 60 * 1000, c: spot.c, r: spot.r };
+  try { localStorage.setItem(GATHER_KEY, JSON.stringify(cooldowns)); } catch (e) { /* 무시 */ }
+  // 효과
+  if (spot.type === "tree") shakeUntil[spot.c + "," + spot.r] = performance.now() + 700;
+  spawnSparkle(dispX(me) - cam.x, dispY(me) - cam.y - 30, 10);
+  floatItem = { id: pick.id, t0: performance.now() };
+  showToast(isNew ? `${pick.name}을(를) 처음 모았어요! 도감에 들어갔어요.` : `${pick.name}이(가) 또 나왔어요.`);
+  if (isNew && me.items.size === ITEMS.length) {
+    setTimeout(() => {
+      showToast("재료 도감을 다 채웠어요! 축하해요!");
+      spawnSparkle(canvas.width / 2, canvas.height / 2, 40);
+    }, 1400);
+  }
+});
+
+/* ---------- 재료 도감 창 ---------- */
+function openDex() {
+  $("dexCount").textContent = `모은 재료 ${me.items.size} / ${ITEMS.length}`;
+  const grid = $("dexGrid");
+  grid.innerHTML = "";
+  for (const it of ITEMS) {
+    const got = me.items.has(it.id);
+    const cell = document.createElement("div");
+    cell.className = "dex-cell" + (got ? "" : " unknown");
+    const cv = document.createElement("canvas");
+    cv.width = 16; cv.height = 16;
+    const x = cv.getContext("2d");
+    x.imageSmoothingEnabled = false;
+    x.drawImage(itemSprite(it.id), 0, 0);
+    if (!got) { // 회색 실루엣
+      x.globalCompositeOperation = "source-atop";
+      x.fillStyle = "#B9AE9C";
+      x.fillRect(0, 0, 16, 16);
+    }
+    const nm = document.createElement("span");
+    nm.textContent = got ? it.name : "?";
+    cell.appendChild(cv);
+    cell.appendChild(nm);
+    grid.appendChild(cell);
+  }
+  $("dex").classList.remove("hidden");
+}
+$("dexBtn").addEventListener("click", openDex);
+$("closeDex").addEventListener("click", () => $("dex").classList.add("hidden"));
+
+/* ============================================================
+   사진 찍기 (요구사항 5-5, 서버 없이 화면만)
+   ============================================================ */
+let photoBg = "office";
+
+function drawPhoto() {
+  const cv = $("photoCanvas"), x = cv.getContext("2d");
+  x.imageSmoothingEnabled = false;
+  const W = cv.width, H = cv.height;
+  // 풀밭 바탕
+  for (let r = 0; r < H / 20; r++) for (let c = 0; c < W / 20; c++) {
+    x.fillStyle = (c + r) % 2 === 0 ? "#A9D27E" : "#A2CB76";
+    x.fillRect(c * 20, r * 20, 20, 20);
+  }
+  if (photoBg === "office" || photoBg === "cake") {
+    const f = FACILITIES.find((v) => v.id === (photoBg === "office" ? "plaza" : "cake"));
+    x.drawImage(buildingSprite(f), W / 2 - 112, 30, 224, 208);
+  } else if (photoBg === "pond") {
+    x.fillStyle = "#E8D5A8"; x.fillRect(16, 60, W - 32, 150);
+    x.fillStyle = "#7EC8DF"; x.fillRect(26, 70, W - 52, 130);
+    x.fillStyle = "#A8DEEE";
+    for (let i = 0; i < 7; i++) x.fillRect(40 + (i * 53) % (W - 100), 85 + (i * 37) % 95, 16, 4);
+  } else {
+    x.drawImage(treeSprite(), 36, 54, 66, 88);
+    x.drawImage(treeSprite(), W / 2 - 33, 90, 66, 88);
+    x.drawImage(treeSprite(), W - 102, 60, 66, 88);
+  }
+  // 내 캐릭터 (크게)
+  drawBread(x, me.bread, COLORS[me.colorIdx].hex, me.prop, W / 2 - 80, H - 254, 160);
+  // 액자 틀
+  x.strokeStyle = "#5B3A1E"; x.lineWidth = 14; x.strokeRect(7, 7, W - 14, H - 14);
+  x.strokeStyle = "#F6C244"; x.lineWidth = 6; x.strokeRect(17, 17, W - 34, H - 34);
+  // 아래 띠: 닉네임 + 마을 이름
+  x.fillStyle = "#FFF4E0"; x.fillRect(24, H - 76, W - 48, 50);
+  x.strokeStyle = "#5B3A1E"; x.lineWidth = 3; x.strokeRect(24, H - 76, W - 48, 50);
+  x.fillStyle = "#5B3A1E";
+  x.font = "bold 20px 'Malgun Gothic', sans-serif";
+  x.textAlign = "center"; x.textBaseline = "middle";
+  x.fillText(me.name, W / 2, H - 58);
+  x.font = "12px 'Malgun Gothic', sans-serif";
+  x.fillStyle = "#8A5A33";
+  x.fillText("행복만빵 마을", W / 2, H - 38);
+}
+
+$("photoBtn").addEventListener("click", () => { drawPhoto(); $("photo").classList.remove("hidden"); });
+$("closePhoto").addEventListener("click", () => $("photo").classList.add("hidden"));
+document.querySelectorAll(".pbg-btn").forEach((b) => {
+  b.addEventListener("click", () => {
+    photoBg = b.dataset.bg;
+    document.querySelectorAll(".pbg-btn").forEach((v) => v.classList.toggle("selected", v === b));
+    drawPhoto();
+  });
+});
+$("savePhoto").addEventListener("click", () => {
+  $("photoCanvas").toBlob((blob) => {
+    const a = document.createElement("a");
+    a.href = URL.createObjectURL(blob);
+    a.download = `행복만빵_${me.name || "나"}.png`;
+    a.click();
+    setTimeout(() => URL.revokeObjectURL(a.href), 3000);
+    showToast("사진을 저장했어요!");
+  });
+});
+
 function closeModals() {
-  $("facilityCard").classList.add("hidden");
-  $("bag").classList.add("hidden");
+  ["facilityCard", "bag", "helper", "dex", "board", "photo", "dialog"].forEach((id) => $(id).classList.add("hidden"));
+  dialog = null;
 }
 // 바깥(어두운 부분) 누르면 닫기
-["facilityCard", "bag"].forEach((id) => {
-  $(id).addEventListener("click", (e) => { if (e.target === $(id)) closeModals(); });
+["facilityCard", "bag", "helper", "dex", "board", "photo"].forEach((id) => {
+  $(id).addEventListener("click", (e) => { if (e.target === $(id)) $(id).classList.add("hidden"); });
 });
 
 let toastTimer = null;
@@ -1001,7 +1561,11 @@ function moveActor(a, speed, dt) {
       if (!a.path.length && a === me && pendingFacility) {
         const f = pendingFacility;
         pendingFacility = null;
-        openFacilityCard(f);
+        openFacility(f);
+      } else if (!a.path.length && a === me && pendingNpc) {
+        const n = pendingNpc;
+        pendingNpc = null;
+        if (Math.hypot(me.x - n.x, me.y - n.y) < TILE * 2.8) openNpc(n);
       }
     } else {
       a.x += (dx / dist) * step;
@@ -1184,9 +1748,70 @@ function drawGround(now) {
   }
 }
 
+/* ---------- 마을 게시판 그림 (코르크판 + 종이) ---------- */
+let boardSpriteCv = null;
+function boardSprite() {
+  if (boardSpriteCv) return boardSpriteCv;
+  const cv = document.createElement("canvas");
+  cv.width = 24; cv.height = 32;
+  const x = cv.getContext("2d");
+  const box = (c, r, w, h, col) => { x.fillStyle = col; x.fillRect(c, r, w, h); };
+  // 기둥 2개
+  box(3, 15, 3, 16, "#8A5A33"); box(18, 15, 3, 16, "#8A5A33");
+  box(3, 15, 1, 16, "#6E4525"); box(18, 15, 1, 16, "#6E4525");
+  box(2, 15, 1, 16, OUTLINE); box(6, 15, 1, 16, OUTLINE);
+  box(17, 15, 1, 16, OUTLINE); box(21, 15, 1, 16, OUTLINE);
+  box(3, 30, 3, 1, OUTLINE); box(18, 30, 3, 1, OUTLINE);
+  // 나무 틀 + 코르크판
+  box(1, 2, 22, 16, "#A96A4D");
+  box(1, 2, 22, 1, "#C27E5C");
+  box(3, 4, 18, 12, "#D9B380");
+  box(0, 1, 24, 1, OUTLINE); box(0, 18, 24, 1, OUTLINE);
+  box(0, 2, 1, 16, OUTLINE); box(23, 2, 1, 16, OUTLINE);
+  // 붙어 있는 종이들 + 압정
+  box(5, 6, 5, 6, "#FFFFFF"); box(11, 5, 5, 5, "#FFD9E3"); box(15, 9, 4, 5, "#FFF3C2");
+  box(7, 6, 1, 1, "#E8453C"); box(13, 5, 1, 1, "#4B7FD6"); box(16, 9, 1, 1, "#58B368");
+  box(6, 8, 3, 1, "#C9B07E"); box(6, 10, 3, 1, "#C9B07E"); box(12, 7, 3, 1, "#C9B07E");
+  boardSpriteCv = cv;
+  return cv;
+}
+
+function drawBoard(f, x, y) {
+  // 그림자
+  ctx.fillStyle = "rgba(60,40,20,0.18)";
+  ctx.beginPath();
+  ctx.ellipse(x + 48, y + 124, 44, 9, 0, 0, Math.PI * 2);
+  ctx.fill();
+  if (!f.open) ctx.globalAlpha = 0.8;
+  ctx.drawImage(boardSprite(), x, y, 96, 128);
+  ctx.globalAlpha = 1;
+  // 이름 팻말
+  ctx.fillStyle = "#FFF9EC";
+  ctx.fillRect(x + 14, y + 10, 68, 18);
+  ctx.strokeStyle = OUTLINE;
+  ctx.lineWidth = 2;
+  ctx.strokeRect(x + 14, y + 10, 68, 18);
+  ctx.font = "bold 12px 'Malgun Gothic', sans-serif";
+  ctx.textAlign = "center";
+  ctx.textBaseline = "middle";
+  ctx.fillStyle = f.open ? "#5B3A1E" : "#8C8475";
+  ctx.fillText(f.name, x + 48, y + 20);
+  if (!f.open) {
+    ctx.fillStyle = "#5B3A1E";
+    ctx.beginPath();
+    ctx.roundRect(x + 10, y + 56, 76, 26, 8);
+    ctx.fill();
+    ctx.drawImage(uiIcon("cone"), x + 15, y + 60, 18, 18);
+    ctx.fillStyle = "#FFF4E0";
+    ctx.font = "bold 13px 'Malgun Gothic', sans-serif";
+    ctx.fillText("준비 중", x + 56, y + 70);
+  }
+}
+
 function drawBuilding(f) {
   const R = f.rect;
   const x = R.x - cam.x, y = R.y - cam.y;
+  if (f.board) { drawBoard(f, x, y); return; }
   // 그림자
   ctx.fillStyle = "rgba(60,40,20,0.18)";
   ctx.beginPath();
@@ -1196,7 +1821,7 @@ function drawBuilding(f) {
   ctx.drawImage(buildingSprite(f), x, y, R.w, R.h);
 
   // 간판 글씨 (또렷하게 화면 해상도로, 길면 글씨를 줄인다)
-  const signText = `${f.emoji} ${f.name}`;
+  const signText = f.name;
   ctx.font = "bold 17px 'Malgun Gothic', sans-serif";
   if (ctx.measureText(signText).width > 150) ctx.font = "bold 13px 'Malgun Gothic', sans-serif";
   ctx.textAlign = "center";
@@ -1204,15 +1829,16 @@ function drawBuilding(f) {
   ctx.fillStyle = f.open ? "#5B3A1E" : "#8C8475";
   ctx.fillText(signText, x + R.w / 2, y + 24 * 4 + 2);
 
-  if (!f.open) { // 준비 중 팻말
+  if (!f.open) { // 준비 중 팻말 (고깔 도트 그림 + 글자)
     const px = x + R.w / 2, py = y + 150;
     ctx.fillStyle = "#5B3A1E";
     ctx.beginPath();
     ctx.roundRect(px - 52, py - 17, 104, 34, 10);
     ctx.fill();
+    ctx.drawImage(uiIcon("cone"), px - 44, py - 11, 22, 22);
     ctx.fillStyle = "#FFF4E0";
     ctx.font = "bold 16px 'Malgun Gothic', sans-serif";
-    ctx.fillText("🚧 준비 중", px, py + 1);
+    ctx.fillText("준비 중", px + 11, py + 1);
   }
 }
 
@@ -1223,7 +1849,81 @@ function drawTreeAt(c, r) {
   ctx.beginPath();
   ctx.ellipse(x, y - 4, 24, 8, 0, 0, Math.PI * 2);
   ctx.fill();
-  ctx.drawImage(treeSprite(), x - 33, y - 88, 66, 88);
+  // 흔들기 효과
+  const sh = shakeUntil[c + "," + r];
+  const off = sh && performance.now() < sh ? Math.sin(performance.now() / 30) * 3 : 0;
+  ctx.drawImage(treeSprite(), x - 33 + off, y - 88, 66, 88);
+}
+
+/* ---------- 반짝이 효과와 떠오르는 재료 ---------- */
+const particles = [];
+function spawnSparkle(sx, sy, n) {
+  for (let i = 0; i < n; i++) {
+    const a = Math.random() * Math.PI * 2, sp = 40 + Math.random() * 90;
+    particles.push({
+      x: sx, y: sy,
+      vx: Math.cos(a) * sp, vy: Math.sin(a) * sp - 40,
+      life: 0.7 + Math.random() * 0.4,
+      color: ["#FFD66B", "#F77C9A", "#9FDCC2", "#FFFFFF"][i % 4],
+    });
+  }
+}
+function updateDrawParticles(dt) {
+  for (let i = particles.length - 1; i >= 0; i--) {
+    const p = particles[i];
+    p.life -= dt;
+    if (p.life <= 0) { particles.splice(i, 1); continue; }
+    p.x += p.vx * dt; p.y += p.vy * dt; p.vy += 60 * dt;
+    ctx.fillStyle = p.color;
+    ctx.fillRect(p.x - 2, p.y - 2, 4, 4);
+  }
+}
+function drawFloatItem() {
+  if (!floatItem) return;
+  const t = (performance.now() - floatItem.t0) / 1000;
+  if (t > 1.1) { floatItem = null; return; }
+  ctx.globalAlpha = Math.max(0, Math.min(1, 1.4 - t));
+  ctx.drawImage(itemSprite(floatItem.id), dispX(me) - cam.x - 20, dispY(me) - cam.y - CHAR_SIZE - 46 - t * 30, 40, 40);
+  ctx.globalAlpha = 1;
+}
+
+/* ---------- 미션 담당 "!" 표시와 길잡이 화살표 ---------- */
+function drawNpcMark(now) {
+  const npc = NPCS[0];
+  if (Math.hypot(me.x - npc.x, me.y - npc.y) > TILE * 4) return;
+  const x = npc.x - cam.x;
+  const y = (npc._lbl ? npc._lbl.ly : npc.y - cam.y - CHAR_SIZE - 4) - 26 + Math.sin(now / 180) * 3;
+  ctx.fillStyle = "#F6C244";
+  ctx.strokeStyle = OUTLINE;
+  ctx.lineWidth = 2;
+  ctx.beginPath();
+  ctx.arc(x, y, 11, 0, Math.PI * 2);
+  ctx.fill();
+  ctx.stroke();
+  ctx.fillStyle = "#5B3A1E";
+  ctx.font = "bold 16px sans-serif";
+  ctx.textAlign = "center";
+  ctx.textBaseline = "middle";
+  ctx.fillText("!", x, y + 1);
+}
+
+function drawMissionArrow(now) {
+  if (!missionTarget) return;
+  const x = dispX(me) - cam.x;
+  const topY = (me._lbl ? me._lbl.ly : dispY(me) - cam.y - CHAR_SIZE - 4) - 26 + Math.sin(now / 200) * 3;
+  const ang = Math.atan2(missionTarget.doorY - me.y, missionTarget.doorX - me.x);
+  ctx.save();
+  ctx.translate(x, topY);
+  ctx.rotate(ang);
+  ctx.fillStyle = "#F6C244";
+  ctx.strokeStyle = OUTLINE;
+  ctx.lineWidth = 2;
+  ctx.beginPath();
+  ctx.moveTo(13, 0); ctx.lineTo(-8, -9); ctx.lineTo(-3, 0); ctx.lineTo(-8, 9);
+  ctx.closePath();
+  ctx.fill();
+  ctx.stroke();
+  ctx.restore();
 }
 
 function drawCharacter(ch, isMe, now) {
@@ -1275,7 +1975,7 @@ function layoutAndDrawLabels(dt) {
   ctx.textAlign = "center";
   ctx.textBaseline = "middle";
 
-  const chars = [me, ...friends]; // 내 이름표가 맨 먼저 자리를 잡는다 (항상 캐릭터 바로 위)
+  const chars = [me, ...friends, ...NPCS]; // 내 이름표가 맨 먼저 자리를 잡는다 (항상 캐릭터 바로 위)
   const placed = [];
   for (const ch of chars) {
     const prop = PROPS.find((p) => p.id === ch.prop);
@@ -1372,7 +2072,9 @@ function loop(now) {
   if (WORLD_W < canvas.width) cam.x = (WORLD_W - canvas.width) / 2;
   if (WORLD_H < canvas.height) cam.y = (WORLD_H - canvas.height) / 2;
 
-  updateEnterButton(); // 문 앞이면 들어가기 버튼 보이기
+  updateEnterButton();  // 문 앞이면 들어가기 버튼 보이기
+  updateGatherButton(); // 나무, 연못 근처면 흔들기/건지기 버튼 보이기
+  updateMission();      // 사무소 캐릭터 대화와 미션 도착 확인
 
   ctx.clearRect(0, 0, canvas.width, canvas.height);
   drawGround(now);
@@ -1383,6 +2085,7 @@ function loop(now) {
   for (const f of FACILITIES) items.push({ y: f.baseY, draw: () => drawBuilding(f) });
   for (const [c, r] of borderTrees) items.push({ y: (r + 1) * TILE, draw: () => drawTreeAt(c, r) });
   for (const [c, r] of TREES) items.push({ y: (r + 1) * TILE, draw: () => drawTreeAt(c, r) });
+  for (const npc of NPCS) items.push({ y: npc.y, draw: () => drawCharacter(npc, false, now) });
   for (const fr of friends) items.push({ y: dispY(fr), draw: () => drawCharacter(fr, false, now) });
   items.push({ y: dispY(me), draw: () => drawCharacter(me, true, now) });
   items.sort((a, b) => a.y - b.y);
@@ -1393,11 +2096,42 @@ function loop(now) {
 
   // 이름표는 맨 마지막에 (겹침 비켜 그리기 + 내 이름표 항상 맨 위)
   layoutAndDrawLabels(dt);
+
+  // 쉬는 중인 나무·물가의 새싹, 사무소 캐릭터 "!", 미션 화살표, 떠오르는 재료, 반짝이 효과
+  drawRestingSprouts(now);
+  drawNpcMark(now);
+  drawMissionArrow(now);
+  drawFloatItem();
+  updateDrawParticles(dt);
+}
+
+/* ============================================================
+   화면 아이콘 끼우기 (이모지 대신 도트 그림)
+   ============================================================ */
+function setupIcons() {
+  // 입장 화면 제목
+  document.querySelector(".logo").prepend(mkIcon(breadSprite("bun", COLORS[0].hex)));
+  // 오른쪽 위 버튼들
+  $("photoBtn").appendChild(mkIcon(propIcon("camera")));
+  $("dexBtn").appendChild(mkIcon(uiIcon("book")));
+  $("bagBtn").appendChild(mkIcon(uiIcon("bag")));
+  // 창 제목들
+  $("bagTitle").prepend(mkIcon(uiIcon("bag")));
+  $("dexTitle").prepend(mkIcon(uiIcon("book")));
+  $("boardTitle").prepend(mkIcon(uiIcon("pin")));
+  $("boardNoticeTitle").prepend(mkIcon(uiIcon("megaphone")));
+  $("photoTitle").prepend(mkIcon(propIcon("camera")));
+  // 공지 말풍선
+  $("notice").prepend(mkIcon(uiIcon("megaphone")));
+  // 도우미 설명 버튼들
+  const topicIcons = { move: uiIcon("move"), prop: propIcon("ribbon"), gather: itemSprite("strawberry"), photo: propIcon("camera") };
+  document.querySelectorAll(".helper-btn").forEach((b) => b.prepend(mkIcon(topicIcons[b.dataset.topic])));
 }
 
 /* ============================================================
    시작
    ============================================================ */
+setupIcons();
 setupEntry();
 setupBag();
 resize();

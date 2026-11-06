@@ -11,7 +11,7 @@
   <!-- ========== 입장 화면 ========== -->
   <div id="entry" class="screen">
     <div class="entry-card">
-      <h1 class="logo">🍞 행복만빵 마을</h1>
+      <h1 class="logo">행복만빵 마을</h1>
       <p class="entry-sub">닉네임과 빵 친구를 고르고 마을에 들어와요.</p>
 
       <!-- 1. 닉네임 -->
@@ -38,15 +38,17 @@
   <div id="village" class="screen hidden">
     <canvas id="game"></canvas>
 
-    <!-- 상단 공지 말풍선 (가짜 데이터) -->
-    <div id="notice" class="notice">📢 행복만빵 마을에 온 걸 환영해요!</div>
+    <!-- 상단 공지 말풍선 -->
+    <div id="notice" class="notice"><span id="noticeText">행복만빵 마을에 온 걸 환영해요!</span></div>
 
     <!-- 연결 상태 (가짜) -->
     <div id="connStatus" class="conn hidden">마을과 연결 중이에요…</div>
 
     <!-- 오른쪽 위 버튼들 -->
     <div class="top-right">
-      <button id="bagBtn" class="round-btn" title="소품함">🎒</button>
+      <button id="photoBtn" class="round-btn" title="사진 찍기"></button>
+      <button id="dexBtn" class="round-btn" title="재료 도감"></button>
+      <button id="bagBtn" class="round-btn" title="소품함"></button>
     </div>
 
     <!-- 왼쪽 아래 방향 버튼 -->
@@ -58,7 +60,20 @@
     </div>
 
     <!-- 시설 문 앞에 서면 나오는 들어가기 버튼 -->
-    <button id="facilityEnterBtn" class="enter-btn hidden">🚪 들어가기</button>
+    <button id="facilityEnterBtn" class="enter-btn hidden">들어가기</button>
+
+    <!-- 나무·연못 근처에서 나오는 재료 줍기 버튼 -->
+    <button id="gatherBtn" class="enter-btn gather hidden">흔들기</button>
+
+    <!-- 사무소 캐릭터 대화창 -->
+    <div id="dialog" class="dialog hidden">
+      <div class="dialog-box" id="dialogBox">
+        <div class="dialog-name" id="dialogName">반죽 촌장</div>
+        <p id="dialogText"></p>
+        <div class="dialog-next" id="dialogNext">누르면 다음 ▼</div>
+        <button id="dialogGo" class="big-btn hidden">갈래요!</button>
+      </div>
+    </div>
 
     <!-- 안내 문구 -->
     <div class="help-tip">방향키 · 버튼 · 지도를 눌러 걸어가요</div>
@@ -68,7 +83,7 @@
   <div id="facilityCard" class="modal hidden">
     <div class="card">
       <button class="close-x" id="closeCard">✕</button>
-      <div id="cardIcon" class="card-icon">🏠</div>
+      <div id="cardIcon" class="card-icon"></div>
       <h2 id="cardTitle">시설 이름</h2>
       <p id="cardTask">오늘 할 일이 여기 보여요.</p>
       <a id="cardLink" class="big-btn link-btn" href="#" target="_blank" rel="noopener">열어보기</a>
@@ -79,9 +94,65 @@
   <div id="bag" class="modal hidden">
     <div class="card">
       <button class="close-x" id="closeBag">✕</button>
-      <h2>🎒 내 소품함</h2>
+      <h2 id="bagTitle">내 소품함</h2>
       <p class="bag-sub">소품을 누르면 꾸며져요. 한 번 더 누르면 원래 모습이 돼요. (한 번에 하나만)</p>
       <div id="propList" class="prop-list"></div>
+    </div>
+  </div>
+
+  <!-- ========== 도우미 설명 ========== -->
+  <div id="helper" class="modal hidden">
+    <div class="card">
+      <button class="close-x" id="closeHelper">✕</button>
+      <h2 id="helperTitle">🍦 크림 씨</h2>
+      <p class="bag-sub">궁금한 걸 눌러 봐요.</p>
+      <div class="helper-list">
+        <button class="helper-btn" data-topic="move">움직이는 법</button>
+        <button class="helper-btn" data-topic="prop">소품 꾸미기</button>
+        <button class="helper-btn" data-topic="gather">재료 줍기</button>
+        <button class="helper-btn" data-topic="photo">사진 찍기</button>
+      </div>
+      <p id="helperText" class="helper-text hidden"></p>
+    </div>
+  </div>
+
+  <!-- ========== 재료 도감 ========== -->
+  <div id="dex" class="modal hidden">
+    <div class="card">
+      <button class="close-x" id="closeDex">✕</button>
+      <h2 id="dexTitle">재료 도감</h2>
+      <p class="bag-sub" id="dexCount">모은 재료 0 / 20</p>
+      <div id="dexGrid" class="dex-grid"></div>
+    </div>
+  </div>
+
+  <!-- ========== 마을 게시판 ========== -->
+  <div id="board" class="modal hidden">
+    <div class="card">
+      <button class="close-x" id="closeBoard">✕</button>
+      <h2 id="boardTitle">마을 게시판</h2>
+      <h3 class="board-sub" id="boardNoticeTitle">중요한 공지</h3>
+      <p id="boardNotice" class="board-notice">아직 공지가 없어요.</p>
+      <div id="boardBday" class="board-bday hidden"></div>
+      <h3 class="board-sub" id="boardFriendsTitle">오늘 마을에 온 친구 (0명)</h3>
+      <p id="boardFriends" class="board-notice"></p>
+      <a id="boardLink" class="big-btn link-btn hidden" href="#" target="_blank" rel="noopener">작품 게시판 가기</a>
+    </div>
+  </div>
+
+  <!-- ========== 사진 찍기 ========== -->
+  <div id="photo" class="modal hidden">
+    <div class="card">
+      <button class="close-x" id="closePhoto">✕</button>
+      <h2 id="photoTitle">사진 찍기</h2>
+      <div id="photoBgs" class="photo-bgs">
+        <button class="pbg-btn selected" data-bg="office">사무소 앞</button>
+        <button class="pbg-btn" data-bg="cake">케이크 공방</button>
+        <button class="pbg-btn" data-bg="pond">연못</button>
+        <button class="pbg-btn" data-bg="forest">마을 숲</button>
+      </div>
+      <canvas id="photoCanvas" width="360" height="440"></canvas>
+      <button id="savePhoto" class="big-btn">저장하기</button>
     </div>
   </div>
 

@@ -234,7 +234,33 @@ html, body {
   background: var(--white);
   box-shadow: 0 5px 0 rgba(91, 58, 30, 0.35);
   cursor: pointer;
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
 }
+.round-btn canvas {
+  width: 32px;
+  height: 32px;
+  image-rendering: pixelated;
+  pointer-events: none;
+}
+
+/* 도트 아이콘 공통 */
+.ui-ico {
+  width: 22px;
+  height: 22px;
+  image-rendering: pixelated;
+  vertical-align: -4px;
+  margin-right: 4px;
+  pointer-events: none;
+}
+h1 .ui-ico, h2 .ui-ico { width: 26px; height: 26px; vertical-align: -3px; }
+.card-ico {
+  height: 88px;
+  width: auto;
+  image-rendering: pixelated;
+}
+.notice .ui-ico { margin-right: 7px; }
 .round-btn:active { transform: translateY(3px); box-shadow: 0 2px 0 rgba(91, 58, 30, 0.35); }
 
 /* 방향 버튼 (D-pad): 구석에 작게 모은다 (간판을 가리지 않게) */
@@ -294,6 +320,170 @@ html, body {
 @keyframes enter-pop {
   from { opacity: 0; transform: translate(-50%, calc(-100% + 10px)); }
   to   { opacity: 1; transform: translate(-50%, -100%); }
+}
+
+/* 재료 줍기 버튼 (캐릭터 아래에 뜬다) */
+.enter-btn.gather {
+  transform: translate(-50%, 0);
+  font-size: 18px;
+  padding: 9px 20px;
+  animation: none;
+}
+.enter-btn.gather:active { transform: translate(-50%, 3px); }
+
+/* 사무소 캐릭터 대화창 */
+.dialog {
+  position: fixed;
+  left: 0; right: 0; bottom: 0;
+  display: flex;
+  justify-content: center;
+  padding: 16px;
+  z-index: 40;
+  pointer-events: none;
+}
+.dialog-box {
+  pointer-events: auto;
+  width: 100%;
+  max-width: 560px;
+  background: var(--white);
+  border: 4px solid var(--choco);
+  border-radius: 20px;
+  box-shadow: 0 8px 0 rgba(91, 58, 30, 0.3);
+  padding: 8px 22px 16px;
+  cursor: pointer;
+}
+.dialog-name {
+  display: inline-block;
+  background: var(--butter);
+  border: 3px solid var(--choco);
+  border-radius: 999px;
+  padding: 5px 16px;
+  font-size: 16px;
+  font-weight: 800;
+  color: var(--choco);
+  margin-top: -26px;
+  margin-bottom: 8px;
+}
+#dialogText {
+  font-size: 21px;
+  line-height: 1.6;
+  color: var(--choco);
+  min-height: 60px;
+}
+.dialog-next {
+  text-align: right;
+  font-size: 14px;
+  font-weight: 700;
+  color: var(--choco-light);
+  animation: next-blink 1.1s infinite;
+}
+@keyframes next-blink { 0%, 100% { opacity: 1; } 50% { opacity: 0.35; } }
+#dialogGo { margin-top: 6px; }
+
+/* 도우미 설명 */
+.helper-list {
+  display: grid;
+  grid-template-columns: 1fr 1fr;
+  gap: 10px;
+}
+.helper-btn {
+  font-family: inherit;
+  font-size: 17px;
+  font-weight: 700;
+  color: var(--choco);
+  background: var(--cream);
+  border: 3px solid var(--cream-dark);
+  border-radius: 14px;
+  padding: 14px 8px;
+  cursor: pointer;
+}
+.helper-btn:active { background: var(--butter-light); border-color: var(--choco); }
+.helper-text {
+  margin-top: 14px;
+  white-space: pre-line;
+  font-size: 17px;
+  line-height: 1.6;
+  color: var(--choco);
+  background: var(--cream);
+  border-radius: 14px;
+  padding: 14px;
+  text-align: left;
+}
+
+/* 재료 도감 */
+.dex-grid {
+  display: grid;
+  grid-template-columns: repeat(5, 1fr);
+  gap: 8px;
+  max-height: 46vh;
+  overflow-y: auto;
+}
+.dex-cell {
+  background: var(--cream);
+  border: 2px solid var(--cream-dark);
+  border-radius: 12px;
+  padding: 8px 2px 6px;
+  text-align: center;
+}
+.dex-cell canvas {
+  width: 40px;
+  height: 40px;
+  image-rendering: pixelated;
+  display: block;
+  margin: 0 auto;
+}
+.dex-cell span { font-size: 13px; font-weight: 700; color: var(--choco); }
+.dex-cell.unknown span { color: #A89C8A; }
+
+/* 마을 게시판 창 */
+.board-sub { font-size: 17px; color: var(--choco); margin: 4px 0 8px; }
+.board-notice {
+  white-space: pre-line;
+  font-size: 17px;
+  line-height: 1.6;
+  color: var(--choco);
+  background: var(--cream);
+  border: 2px dashed var(--cream-dark);
+  border-radius: 14px;
+  padding: 14px;
+  margin-bottom: 10px;
+  text-align: left;
+}
+.board-bday {
+  font-size: 17px;
+  font-weight: 700;
+  color: var(--choco);
+  background: var(--pink-light);
+  border-radius: 14px;
+  padding: 12px;
+  margin-bottom: 10px;
+}
+
+/* 사진 찍기 */
+.photo-bgs {
+  display: grid;
+  grid-template-columns: 1fr 1fr;
+  gap: 8px;
+  margin-bottom: 12px;
+}
+.pbg-btn {
+  font-family: inherit;
+  font-size: 15px;
+  font-weight: 700;
+  color: var(--choco);
+  background: var(--cream);
+  border: 3px solid var(--cream-dark);
+  border-radius: 12px;
+  padding: 10px 4px;
+  cursor: pointer;
+}
+.pbg-btn.selected { border-color: var(--choco); background: var(--butter-light); }
+#photoCanvas {
+  width: min(100%, 300px);
+  image-rendering: pixelated;
+  display: block;
+  margin: 0 auto;
+  border-radius: 8px;
 }
 
 .help-tip {
