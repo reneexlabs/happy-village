@@ -596,6 +596,34 @@ h1 .ui-ico, h2 .ui-ico { width: 26px; height: 26px; vertical-align: -3px; }
 }
 .prop-btn:active { transform: scale(0.94); }
 
+/* 소품함 아래 작은 버튼들과 확인 창 */
+.bag-actions {
+  display: flex;
+  gap: 8px;
+  margin-top: 14px;
+}
+.bag-actions .big-btn { flex: 1; margin-top: 8px; padding: 12px; font-size: 18px; }
+.small-btn {
+  flex: 1;
+  font-family: inherit;
+  font-size: 14px;
+  font-weight: 700;
+  color: var(--choco-light);
+  background: var(--cream);
+  border: 2px solid var(--cream-dark);
+  border-radius: 12px;
+  padding: 10px 6px;
+  cursor: pointer;
+}
+.small-btn:active { background: var(--butter-light); border-color: var(--choco); }
+.confirm-text {
+  font-size: 20px;
+  font-weight: 700;
+  color: var(--choco);
+  margin: 10px 0 6px;
+}
+.confirm-no { background: var(--cream); }
+
 /* 토스트 알림 */
 .toast {
   position: fixed;

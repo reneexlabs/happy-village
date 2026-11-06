@@ -432,6 +432,14 @@ function uiIcon(name) {
     box(6, 3, 1, 1, O); box(9, 3, 1, 1, O); box(7, 1, 2, 1, O);
     box(6, 12, 1, 1, O); box(9, 12, 1, 1, O); box(7, 14, 2, 1, O);
     box(1, 7, 1, 2, O); box(14, 7, 1, 2, O);
+  } else if (name === "camera") { // 사진 찍기
+    box(2, 5, 12, 8, "#5A5A6E");
+    box(2, 5, 12, 2, "#73738C");
+    box(10, 3, 3, 2, "#5A5A6E");
+    box(6, 7, 4, 4, "#2E2E3C");
+    box(7, 8, 2, 2, "#9FDCC2");
+    box(1, 5, 1, 8, O); box(14, 5, 1, 8, O); box(2, 13, 12, 1, O); box(2, 4, 8, 1, O);
+    box(10, 2, 3, 1, O); box(13, 3, 1, 2, O);
   } else if (name === "sprout") { // 쉬는 중 새싹
     box(7, 8, 2, 5, "#58B368");
     box(3, 6, 4, 3, "#7CC576"); box(9, 6, 4, 3, "#7CC576");
@@ -659,9 +667,68 @@ function setupEntry() {
   $("enterBtn").addEventListener("click", enterVillage);
   $("nickname").addEventListener("keydown", (e) => { if (e.key === "Enter") enterVillage(); });
 
+  // 주소 뒤에 &id=... 가 있으면 그 캐릭터로 바로 들어온다 (선생님용 비상 방법)
+  const urlId = new URLSearchParams(location.search).get("id");
+  if (ONLINE() && urlId) { idLogin(urlId); return; }
+
   // 서버 모드: 같은 기기에서 다시 오면 닉네임 입력 없이 바로 들어온다
   if (ONLINE() && saved && saved.id && saved.name) enterVillage();
 }
+
+/* ---------- ID로 바로 들어오기 (&id=시트의ID) ----------
+   훈련생이 다른 PC에 앉았을 때 선생님이 주소를 만들어 준다.
+   한 번 들어오면 이 기기에 기억돼서 다음부터는 주소 없이 들어온다. */
+async function idLogin(id) {
+  $("nameHint").textContent = "캐릭터를 연결하는 중…";
+  const res = await api({ action: "join", class: CLASS, id: id });
+  if (!res || !res.ok || !res.name) {
+    $("nameHint").textContent = "연결할 캐릭터를 찾지 못했어요. 이름으로 들어와 주세요.";
+    return;
+  }
+  me.id = id;
+  me.name = String(res.name);
+  me.bread = res.bread || "bun";
+  me.colorIdx = Math.max(0, Math.min(5, Number(res.color) || 0));
+  me.prop = res.prop || null;
+  me.items = new Set(String(res.items || "").split(",").filter(Boolean));
+  previewSelected.bread = me.bread;
+  previewSelected.colorIdx = me.colorIdx;
+  $("nickname").value = me.name;
+  try {
+    localStorage.setItem(SAVE_KEY, JSON.stringify({
+      id: me.id, name: me.name, bread: me.bread, colorIdx: me.colorIdx, prop: me.prop, items: [...me.items],
+    }));
+  } catch (e) { /* 무시 */ }
+  // 주소에서 id를 지워 둔다 (즐겨찾기해도 깨끗하게)
+  try { history.replaceState(null, "", location.pathname + (CLASS !== "A" ? "?class=" + CLASS : "")); } catch (e) { /* 무시 */ }
+  enterVillage();
+}
+
+/* ---------- 소품함 아래 버튼: 내 모습 바꾸기 / 다른 캐릭터로 들어가기 ---------- */
+let changingLook = false;
+
+$("changeLookBtn").addEventListener("click", () => {
+  closeModals();
+  changingLook = true;
+  villageEl.classList.add("hidden");
+  entryEl.classList.remove("hidden");
+  $("nickname").value = me.name;
+  $("nickname").disabled = true; // 닉네임은 바꿀 수 없다
+  $("nameHint").textContent = "빵과 색만 바꿀 수 있어요.";
+  previewSelected.bread = me.bread;
+  previewSelected.colorIdx = me.colorIdx;
+  refreshEntry();
+});
+
+$("switchCharBtn").addEventListener("click", () => {
+  $("confirm").classList.remove("hidden");
+});
+$("confirmNo").addEventListener("click", () => $("confirm").classList.add("hidden"));
+$("confirmYes").addEventListener("click", () => {
+  // 이 기기에 저장된 내 정보만 지운다 (시트의 줄은 그대로)
+  try { localStorage.removeItem(SAVE_KEY); } catch (e) { /* 무시 */ }
+  location.href = location.pathname + (CLASS !== "A" ? "?class=" + CLASS : "");
+});
 
 function refreshEntry() {
   const colorHex = COLORS[previewSelected.colorIdx].hex;
@@ -675,6 +742,28 @@ function refreshEntry() {
   drawMini($("previewCanvas"), previewSelected.bread, colorHex, me.prop);
 }
 
+// 시작 위치: 광장 바닥 안의 걸을 수 있는 칸 중 아무 데나
+// - 이미 누가 서 있는 칸은 피하고, 사무소 문 바로 앞은 비워 둔다
+function randomSpawnInPlaza() {
+  const plaza = FACILITIES.find((f) => f.id === "plaza");
+  const cands = [];
+  for (let r = 0; r < ROWS; r++) {
+    for (let c = 0; c < COLS; c++) {
+      if (ground[r][c] !== 2 || blocked[r][c]) continue; // 광장 바닥만
+      if (Math.abs(c - plaza.doorC) <= 1 && r <= plaza.doorR + 3) continue; // 사무소 문 앞 통로
+      cands.push([c, r]);
+    }
+  }
+  const taken = new Set();
+  for (const ch of [...friends, ...NPCS]) {
+    taken.add(Math.floor(ch.x / TILE) + "," + Math.floor(ch.y / TILE));
+  }
+  const free = cands.filter(([c, r]) => !taken.has(c + "," + r));
+  const pool = free.length ? free : cands;
+  const [c, r] = pool[Math.floor(Math.random() * pool.length)];
+  return { x: (c + 0.5) * TILE, y: (r + 0.5) * TILE };
+}
+
 async function enterVillage() {
   const raw = $("nickname").value.replace(/\s/g, "");
   const cleaned = raw.replace(/[^가-힣ㄱ-ㅎㅏ-ㅣa-zA-Z0-9]/g, "");
@@ -686,6 +775,13 @@ async function enterVillage() {
   me.name = cleaned;
   me.bread = previewSelected.bread;
   me.colorIdx = previewSelected.colorIdx;
+
+  // 광장 안에서 무작위로 흩어져 시작한다 (모습만 바꿀 때는 서 있던 자리 그대로)
+  if (!changingLook) {
+    const sp = randomSpawnInPlaza();
+    me.x = sp.x;
+    me.y = sp.y;
+  }
 
   // 서버 모드: 입장 등록 + 닉네임 중복 확인
   if (ONLINE()) {
@@ -720,7 +816,11 @@ async function enterVillage() {
   entryEl.classList.add("hidden");
   villageEl.classList.remove("hidden");
   resize();
-  showToast(`${me.name}님, 어서 와요!`); // 들어오면 인사 하나만 잠깐 뜬다
+  showToast(changingLook ? "새 모습으로 바꿨어요!" : `${me.name}님, 어서 와요!`); // 인사 하나만 잠깐 뜬다
+  changingLook = false;
+  $("nickname").disabled = false;
+  $("nameHint").textContent = "";
+  if (ONLINE() && me.id) sendMyPos(true); // 바뀐 모습을 친구 화면에도 바로
   // 안내 문구는 몇 초 뒤에 사라진다 (간판을 가리지 않게)
   setTimeout(() => {
     const tip = document.querySelector(".help-tip");
@@ -1366,18 +1466,21 @@ function updateGatherButton() {
   btn.style.top = (dispY(me) - cam.y + 26) + "px";
 }
 
-// 쉬는 중인 곳에 작은 새싹 표시 (다시 열리면 사라진다)
-function drawRestingSprouts(now) {
+// 쉬는 중인 곳의 새싹 표시를 그리기 순서(items)에 넣는다
+// - 나무는 윗부분(연못은 가장자리 물칸)에 붙이고,
+// - 같은 자리 기준으로 캐릭터보다 먼저 그려져서 캐릭터를 절대 가리지 않는다
+function collectSprouts(items, now) {
   const nowMs = Date.now();
   for (const key in cooldowns) {
     const v = cooldowns[key];
     const t = v ? (v.t || v) : 0;
     if (t <= nowMs) { delete cooldowns[key]; continue; }
     if (!v || v.c === undefined) continue;
+    const isTree = key[0] === "t";
     const sx = (v.c + 0.5) * TILE - cam.x;
-    const sy = (v.r + 1) * TILE - cam.y - 6 + Math.sin(now / 300) * 2;
+    const sy = (isTree ? (v.r + 1) * TILE - 86 : (v.r + 0.5) * TILE) - cam.y + Math.sin(now / 300) * 2;
     if (sx < -30 || sy < -30 || sx > canvas.width + 30 || sy > canvas.height + 30) continue;
-    ctx.drawImage(uiIcon("sprout"), sx - 11, sy - 20, 22, 22);
+    items.push({ y: (v.r + 1) * TILE + 1, draw: () => ctx.drawImage(uiIcon("sprout"), sx - 11, sy - 18, 22, 22) });
   }
 }
 
@@ -1454,20 +1557,51 @@ function drawPhoto() {
     x.fillStyle = (c + r) % 2 === 0 ? "#A9D27E" : "#A2CB76";
     x.fillRect(c * 20, r * 20, 20, 20);
   }
+
+  // 배경 (건물은 작게 위쪽에, 캐릭터와 겹치지 않게)
   if (photoBg === "office" || photoBg === "cake") {
     const f = FACILITIES.find((v) => v.id === (photoBg === "office" ? "plaza" : "cake"));
-    x.drawImage(buildingSprite(f), W / 2 - 112, 30, 224, 208);
+    x.drawImage(buildingSprite(f), W / 2 - 76, 36, 152, 141);
   } else if (photoBg === "pond") {
-    x.fillStyle = "#E8D5A8"; x.fillRect(16, 60, W - 32, 150);
-    x.fillStyle = "#7EC8DF"; x.fillRect(26, 70, W - 52, 130);
+    x.fillStyle = "#E8D5A8"; x.fillRect(22, 56, 192, 116);  // 물가 모래
+    x.fillStyle = "#7EC8DF"; x.fillRect(30, 64, 176, 100);  // 물 (조금 줄임)
     x.fillStyle = "#A8DEEE";
-    for (let i = 0; i < 7; i++) x.fillRect(40 + (i * 53) % (W - 100), 85 + (i * 37) % 95, 16, 4);
+    for (let i = 0; i < 5; i++) x.fillRect(44 + (i * 37) % 140, 78 + (i * 29) % 70, 14, 4);
   } else {
-    x.drawImage(treeSprite(), 36, 54, 66, 88);
-    x.drawImage(treeSprite(), W / 2 - 33, 90, 66, 88);
-    x.drawImage(treeSprite(), W - 102, 60, 66, 88);
+    x.drawImage(treeSprite(), 34, 52, 60, 80);
+    x.drawImage(treeSprite(), W / 2 - 30, 34, 60, 80);
+    x.drawImage(treeSprite(), W - 94, 62, 60, 80);
   }
-  // 내 캐릭터 (크게)
+
+  // 캐릭터 발밑 길 타일
+  x.fillStyle = "#E8D5A8";
+  x.fillRect(W / 2 - 80, H - 172, 160, 92);
+  x.fillStyle = "#DCC693";
+  for (let c = 0; c < 4; c++) for (let r = 0; r < 2; r++) {
+    if ((c + r) % 2 === 0) x.fillRect(W / 2 - 80 + c * 40, H - 172 + r * 46, 40, 46);
+  }
+  x.strokeStyle = "#C9B07E";
+  x.lineWidth = 3;
+  x.strokeRect(W / 2 - 80, H - 172, 160, 92);
+
+  // 작은 소품: 꽃과 풀
+  const flowers = [[42, H - 198], [W - 50, H - 188], [56, 198], [W - 64, 214], [96, H - 116], [W - 96, H - 108]];
+  flowers.forEach(([fx, fy], i) => {
+    x.fillStyle = ["#F77C9A", "#FFD66B", "#FFFFFF", "#C9A7E6"][i % 4];
+    x.fillRect(fx - 3, fy, 3, 3); x.fillRect(fx + 3, fy, 3, 3);
+    x.fillRect(fx, fy - 3, 3, 3); x.fillRect(fx, fy + 3, 3, 3);
+    x.fillStyle = "#F6C244"; x.fillRect(fx, fy, 3, 3);
+  });
+  x.fillStyle = "#8FBC62";
+  [[32, 186], [W - 40, 196], [52, H - 148], [W - 58, H - 142]].forEach(([gx, gy]) => {
+    x.fillRect(gx, gy, 3, 8); x.fillRect(gx + 5, gy + 2, 3, 6);
+  });
+
+  // 내 캐릭터: 발밑 그림자 + 항상 맨 앞, 가운데에서 조금 아래
+  x.fillStyle = "rgba(60,40,20,0.25)";
+  x.beginPath();
+  x.ellipse(W / 2, H - 100, 52, 12, 0, 0, Math.PI * 2);
+  x.fill();
   drawBread(x, me.bread, COLORS[me.colorIdx].hex, me.prop, W / 2 - 80, H - 254, 160);
   // 액자 틀
   x.strokeStyle = "#5B3A1E"; x.lineWidth = 14; x.strokeRect(7, 7, W - 14, H - 14);
@@ -1505,7 +1639,7 @@ $("savePhoto").addEventListener("click", () => {
 });
 
 function closeModals() {
-  ["facilityCard", "bag", "helper", "dex", "board", "photo", "dialog"].forEach((id) => $(id).classList.add("hidden"));
+  ["facilityCard", "bag", "helper", "dex", "board", "photo", "dialog", "confirm"].forEach((id) => $(id).classList.add("hidden"));
   dialog = null;
 }
 // 바깥(어두운 부분) 누르면 닫기
@@ -2085,6 +2219,7 @@ function loop(now) {
   for (const f of FACILITIES) items.push({ y: f.baseY, draw: () => drawBuilding(f) });
   for (const [c, r] of borderTrees) items.push({ y: (r + 1) * TILE, draw: () => drawTreeAt(c, r) });
   for (const [c, r] of TREES) items.push({ y: (r + 1) * TILE, draw: () => drawTreeAt(c, r) });
+  collectSprouts(items, now); // 쉬는 중 새싹 (캐릭터 뒤에 깔린다)
   for (const npc of NPCS) items.push({ y: npc.y, draw: () => drawCharacter(npc, false, now) });
   for (const fr of friends) items.push({ y: dispY(fr), draw: () => drawCharacter(fr, false, now) });
   items.push({ y: dispY(me), draw: () => drawCharacter(me, true, now) });
@@ -2097,8 +2232,7 @@ function loop(now) {
   // 이름표는 맨 마지막에 (겹침 비켜 그리기 + 내 이름표 항상 맨 위)
   layoutAndDrawLabels(dt);
 
-  // 쉬는 중인 나무·물가의 새싹, 사무소 캐릭터 "!", 미션 화살표, 떠오르는 재료, 반짝이 효과
-  drawRestingSprouts(now);
+  // 사무소 캐릭터 "!", 미션 화살표, 떠오르는 재료, 반짝이 효과
   drawNpcMark(now);
   drawMissionArrow(now);
   drawFloatItem();
@@ -2111,8 +2245,8 @@ function loop(now) {
 function setupIcons() {
   // 입장 화면 제목
   document.querySelector(".logo").prepend(mkIcon(breadSprite("bun", COLORS[0].hex)));
-  // 오른쪽 위 버튼들
-  $("photoBtn").appendChild(mkIcon(propIcon("camera")));
+  // 오른쪽 위 버튼들 (셋 다 같은 크기의 도트 아이콘)
+  $("photoBtn").appendChild(mkIcon(uiIcon("camera")));
   $("dexBtn").appendChild(mkIcon(uiIcon("book")));
   $("bagBtn").appendChild(mkIcon(uiIcon("bag")));
   // 창 제목들
@@ -2120,11 +2254,11 @@ function setupIcons() {
   $("dexTitle").prepend(mkIcon(uiIcon("book")));
   $("boardTitle").prepend(mkIcon(uiIcon("pin")));
   $("boardNoticeTitle").prepend(mkIcon(uiIcon("megaphone")));
-  $("photoTitle").prepend(mkIcon(propIcon("camera")));
+  $("photoTitle").prepend(mkIcon(uiIcon("camera")));
   // 공지 말풍선
   $("notice").prepend(mkIcon(uiIcon("megaphone")));
   // 도우미 설명 버튼들
-  const topicIcons = { move: uiIcon("move"), prop: propIcon("ribbon"), gather: itemSprite("strawberry"), photo: propIcon("camera") };
+  const topicIcons = { move: uiIcon("move"), prop: propIcon("ribbon"), gather: itemSprite("strawberry"), photo: uiIcon("camera") };
   document.querySelectorAll(".helper-btn").forEach((b) => b.prepend(mkIcon(topicIcons[b.dataset.topic])));
 }
 
