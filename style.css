@@ -36,120 +36,200 @@ html, body {
 
 .hidden { display: none !important; }
 
-/* ============ 입장 화면 ============ */
+/* ============ 입장 화면 (빵나라 느낌) ============ */
 #entry {
   display: flex;
   align-items: center;
   justify-content: center;
-  background:
-    radial-gradient(circle at 20% 20%, #FFE9BF 0 12%, transparent 12.5%),
-    radial-gradient(circle at 80% 30%, #FFD9E3 0 10%, transparent 10.5%),
-    radial-gradient(circle at 70% 80%, #D7F2E5 0 11%, transparent 11.5%),
-    radial-gradient(circle at 15% 75%, #FFE9BF 0 9%, transparent 9.5%),
-    var(--cream);
+  background: linear-gradient(#FFF9EC, #FFF0D6 55%, #FFE6C4);
   overflow-y: auto;
-  padding: 20px;
+  padding: 14px;
+  position: fixed;
+}
+
+/* 생크림 구름: 테두리 없이 하얗게, 아래쪽만 연한 크림색 그림자 */
+.cloud {
+  position: absolute;
+  background: #FFFFFF;
+  border-radius: 999px;
+  box-shadow: inset 0 -12px 0 -4px #F7EBD6; /* 아래쪽 크림 그림자 */
+  animation: cloud-drift 70s linear infinite alternate;
+}
+.cloud::before, .cloud::after {
+  content: "";
+  position: absolute;
+  background: #FFFFFF;
+  border-radius: 50%;
+  box-shadow: inset 0 -9px 0 -4px #F7EBD6;
+}
+.cloud.c1 { width: 170px; height: 52px; top: 7%; left: 6%; }
+.cloud.c1::before { width: 64px; height: 64px; top: -30px; left: 26px; }
+.cloud.c1::after  { width: 46px; height: 46px; top: -20px; left: 88px; }
+.cloud.c2 { width: 120px; height: 38px; top: 15%; right: 8%; animation-duration: 55s; animation-delay: -20s; }
+.cloud.c2::before { width: 46px; height: 46px; top: -22px; left: 18px; }
+.cloud.c2::after  { width: 32px; height: 32px; top: -13px; left: 62px; }
+.cloud.c3 { width: 88px; height: 28px; bottom: 12%; left: 12%; animation-duration: 85s; animation-delay: -45s; }
+.cloud.c3::before { width: 34px; height: 34px; top: -16px; left: 14px; }
+.cloud.c3::after  { width: 24px; height: 24px; top: -9px; left: 44px; }
+.cloud.c4 { width: 140px; height: 44px; bottom: 20%; right: 13%; animation-duration: 62s; animation-delay: -10s; }
+.cloud.c4::before { width: 52px; height: 52px; top: -26px; left: 22px; }
+.cloud.c4::after  { width: 38px; height: 38px; top: -16px; left: 72px; }
+
+@keyframes cloud-drift { /* 아주 천천히 옆으로 흘러간다 */
+  from { transform: translateX(-36px); }
+  to   { transform: translateX(36px); }
 }
 
 .entry-card {
+  position: relative;
   width: 100%;
-  max-width: 420px;
+  max-width: 400px;
   background: var(--white);
   border: 4px solid var(--choco);
-  border-radius: 24px;
-  box-shadow: 0 10px 0 rgba(91, 58, 30, 0.25);
-  padding: 28px 24px 24px;
+  border-radius: 26px;
+  box-shadow: 0 10px 0 rgba(91, 58, 30, 0.22);
+  padding: 18px 22px 16px;
   text-align: center;
   margin: auto;
 }
 
+/* 처음이에요 화면 위의 작은 돌아가기 버튼 */
+.back-btn {
+  position: absolute;
+  top: 10px;
+  left: 12px;
+  font-family: inherit;
+  font-size: 13px;
+  font-weight: 700;
+  color: var(--choco-light);
+  background: var(--cream);
+  border: 2px solid var(--cream-dark);
+  border-radius: 999px;
+  padding: 5px 12px;
+  cursor: pointer;
+}
+.back-btn:active { background: var(--butter-light); border-color: var(--choco); }
+
+/* 제목: 픽셀 글씨 느낌 */
 .logo {
-  font-size: 34px;
+  font-size: 30px;
+  font-weight: 900;
   color: var(--choco);
-  letter-spacing: 1px;
-  margin-bottom: 6px;
+  letter-spacing: 3px;
+  text-shadow: 3px 3px 0 var(--cream-dark);
+  margin-bottom: 2px;
 }
 
 .entry-sub {
-  font-size: 16px;
+  font-size: 15px;
   color: var(--choco-light);
-  margin-bottom: 20px;
+  margin-bottom: 10px;
 }
 
 .field-label {
   display: block;
   text-align: left;
-  font-size: 17px;
+  font-size: 15px;
   font-weight: 700;
   color: var(--choco);
-  margin: 16px 0 8px;
+  margin: 8px 0 5px;
 }
 
-#nickname {
+#nickname, #pin {
   width: 100%;
-  font-size: 22px;
-  padding: 12px 14px;
-  border: 3px solid var(--choco);
+  font-size: 21px;
+  padding: 10px 12px;
+  border: 3px solid var(--choco-light);
   border-radius: 14px;
   background: var(--cream);
   color: var(--choco);
   outline: none;
   text-align: center;
 }
-#nickname:focus { border-color: var(--butter); background: var(--white); }
-
-.hint {
-  min-height: 20px;
-  font-size: 14px;
-  color: var(--pink);
-  margin-top: 6px;
-  text-align: left;
+#nickname:focus, #pin:focus { border-color: var(--butter); background: var(--white); }
+#nickname:disabled { background: #EFE6D6; color: var(--choco-light); }
+#pin { letter-spacing: 12px; font-weight: 800; }
+#nickname::placeholder, #pin::placeholder {
+  color: #C9B89B;
+  font-size: 17px;
+  font-weight: 400;
+  letter-spacing: normal;
 }
 
-/* 캐릭터 / 색 선택 */
+.pin-guide {
+  font-size: 14px;
+  color: var(--choco-light);
+  margin-top: 6px;
+  text-align: left;
+  word-break: keep-all; /* 단어 중간에서 줄바꿈되지 않게 */
+  line-height: 1.5;
+}
+
+.hint {
+  min-height: 18px;
+  font-size: 14px;
+  font-weight: 700;
+  color: var(--pink);
+  margin-top: 8px;
+}
+
+/* 빵 고르기: 동그란 접시 위의 빵 */
 .picker {
   display: grid;
   grid-template-columns: repeat(6, 1fr);
-  gap: 8px;
+  gap: 7px;
 }
 
 .pick-btn {
   aspect-ratio: 1;
   border: 3px solid var(--cream-dark);
-  border-radius: 14px;
-  background: var(--cream);
+  border-radius: 50%;
+  background:
+    radial-gradient(ellipse 70% 24% at 50% 82%, rgba(91, 58, 30, 0.12) 0 99%, transparent 100%),
+    #FFFFFF;
   cursor: pointer;
   display: flex;
   align-items: center;
   justify-content: center;
-  padding: 2px;
-  transition: transform 0.08s;
+  padding: 3px;
+  transition: transform 0.1s;
 }
-.pick-btn canvas { width: 100%; height: 100%; }
+.pick-btn canvas { width: 92%; height: 92%; }
 .pick-btn:active { transform: scale(0.92); }
 .pick-btn.selected {
   border-color: var(--choco);
-  background: var(--butter-light);
+  background:
+    radial-gradient(ellipse 70% 24% at 50% 82%, rgba(91, 58, 30, 0.14) 0 99%, transparent 100%),
+    #FFF8E4;
   box-shadow: 0 3px 0 rgba(91, 58, 30, 0.3);
+  transform: scale(1.12); /* 고른 접시는 살짝 커진다 */
 }
+.pick-btn.selected:active { transform: scale(1.02); }
 
-.colors .pick-btn { border-radius: 50%; }
-.color-dot {
-  width: 70%;
-  height: 70%;
-  border-radius: 50%;
-  border: 3px solid rgba(0, 0, 0, 0.25);
+/* 색 고르기: 크림 짤주머니 버튼 */
+.colors .pick-btn {
+  border-radius: 14px;
+  background: var(--cream);
 }
+.colors .pick-btn.selected { background: var(--butter-light); transform: scale(1.1); }
 
 .preview {
   display: block;
-  margin: 18px auto 6px;
-  width: 140px;
-  height: 140px;
+  margin: 8px auto 0;
+  width: 84px;
+  height: 84px;
   image-rendering: pixelated;
   background: var(--cream);
   border: 3px dashed var(--cream-dark);
-  border-radius: 18px;
+  border-radius: 16px;
+}
+
+.small-btn.wide {
+  display: block;
+  width: 100%;
+  margin-top: 10px;
+  font-size: 15px;
+  padding: 11px;
 }
 
 /* 큰 버튼 */
@@ -169,6 +249,12 @@ html, body {
   cursor: pointer;
 }
 .big-btn:active { transform: translateY(4px); box-shadow: 0 2px 0 rgba(91, 58, 30, 0.35); }
+.big-btn:disabled {
+  opacity: 0.45;
+  cursor: default;
+  box-shadow: 0 3px 0 rgba(91, 58, 30, 0.2);
+  transform: none;
+}
 
 /* ============ 마을 화면 ============ */
 #village { background: #87b864; }
@@ -185,9 +271,8 @@ html, body {
 .notice {
   position: absolute;
   top: 14px;
-  left: 50%;
-  transform: translateX(-50%);
-  max-width: min(90%, 560px);
+  left: 14px;
+  max-width: min(55%, 460px);
   background: var(--white);
   border: 3px solid var(--choco);
   border-radius: 999px;

@@ -8,29 +8,38 @@
 </head>
 <body>
 
-  <!-- ========== 입장 화면 ========== -->
+  <!-- ========== 입장 화면 (매번 이 화면부터) ========== -->
   <div id="entry" class="screen">
-    <div class="entry-card">
+    <div class="cloud c1"></div>
+    <div class="cloud c2"></div>
+    <div class="cloud c3"></div>
+    <div class="cloud c4"></div>
+    <div class="entry-card" id="entryCard">
+      <button id="backBtn" class="back-btn hidden">← 돌아가기</button>
       <h1 class="logo">행복만빵 마을</h1>
-      <p class="entry-sub">닉네임과 빵 친구를 고르고 마을에 들어와요.</p>
+      <p class="entry-sub">오늘도 반가워요</p>
 
-      <!-- 1. 닉네임 -->
-      <label class="field-label" for="nickname">이름 (2~8자)</label>
-      <input id="nickname" type="text" maxlength="8" placeholder="예: 딸기빵" autocomplete="off" />
+      <label class="field-label" for="nickname">닉네임 (예: 딸기빵)</label>
+      <input id="nickname" type="text" maxlength="8" placeholder="닉네임을 입력하세요" autocomplete="off" />
+
+      <div id="pinArea">
+        <label class="field-label" for="pin">마을 비밀번호 (숫자 4개)</label>
+        <input id="pin" type="text" inputmode="numeric" maxlength="4" placeholder="비밀번호를 입력하세요" autocomplete="off" />
+        <p id="pinGuide" class="pin-guide hidden">마을에서만 쓸 새 숫자 4개를 정해요. 평소에 쓰는 비밀번호는 안&nbsp;돼요.</p>
+      </div>
+
+      <!-- 처음이에요(새 캐릭터)에서만 보이는 부분 -->
+      <div id="newOnly" class="hidden">
+        <label class="field-label">빵 고르기</label>
+        <div id="breadPicker" class="picker"></div>
+        <label class="field-label">색 고르기</label>
+        <div id="colorPicker" class="picker colors"></div>
+        <canvas id="previewCanvas" width="160" height="160" class="preview"></canvas>
+      </div>
+
       <p id="nameHint" class="hint"></p>
-
-      <!-- 2. 빵 캐릭터 고르기 -->
-      <label class="field-label">빵 친구 고르기</label>
-      <div id="breadPicker" class="picker"></div>
-
-      <!-- 3. 색 고르기 -->
-      <label class="field-label">색 고르기</label>
-      <div id="colorPicker" class="picker colors"></div>
-
-      <!-- 미리보기 -->
-      <canvas id="previewCanvas" width="160" height="160" class="preview"></canvas>
-
-      <button id="enterBtn" class="big-btn">마을에 들어가기</button>
+      <button id="enterBtn" class="big-btn">들어가기</button>
+      <button id="newCharBtn" class="small-btn wide">처음이에요</button>
     </div>
   </div>
 
@@ -46,6 +55,7 @@
 
     <!-- 오른쪽 위 버튼들 -->
     <div class="top-right">
+      <button id="soundBtn" class="round-btn" title="소리 켜기/끄기"></button>
       <button id="photoBtn" class="round-btn" title="사진 찍기"></button>
       <button id="dexBtn" class="round-btn" title="재료 도감"></button>
       <button id="bagBtn" class="round-btn" title="소품함"></button>
@@ -99,35 +109,7 @@
       <div id="propList" class="prop-list"></div>
       <div class="bag-actions">
         <button id="changeLookBtn" class="small-btn">내 모습 바꾸기</button>
-        <button id="switchCharBtn" class="small-btn">다른 캐릭터로 들어가기</button>
       </div>
-    </div>
-  </div>
-
-  <!-- ========== 확인 창 ========== -->
-  <div id="confirm" class="modal hidden">
-    <div class="card">
-      <p class="confirm-text">다른 캐릭터로 들어갈까요?</p>
-      <div class="bag-actions">
-        <button id="confirmYes" class="big-btn">네</button>
-        <button id="confirmNo" class="big-btn confirm-no">아니요</button>
-      </div>
-    </div>
-  </div>
-
-  <!-- ========== 도우미 설명 ========== -->
-  <div id="helper" class="modal hidden">
-    <div class="card">
-      <button class="close-x" id="closeHelper">✕</button>
-      <h2 id="helperTitle">🍦 크림 씨</h2>
-      <p class="bag-sub">궁금한 걸 눌러 봐요.</p>
-      <div class="helper-list">
-        <button class="helper-btn" data-topic="move">움직이는 법</button>
-        <button class="helper-btn" data-topic="prop">소품 꾸미기</button>
-        <button class="helper-btn" data-topic="gather">재료 줍기</button>
-        <button class="helper-btn" data-topic="photo">사진 찍기</button>
-      </div>
-      <p id="helperText" class="helper-text hidden"></p>
     </div>
   </div>
 
@@ -163,7 +145,7 @@
       <div id="photoBgs" class="photo-bgs">
         <button class="pbg-btn selected" data-bg="office">사무소 앞</button>
         <button class="pbg-btn" data-bg="cake">케이크 공방</button>
-        <button class="pbg-btn" data-bg="pond">연못</button>
+        <button class="pbg-btn" data-bg="pond">바닷가</button>
         <button class="pbg-btn" data-bg="forest">마을 숲</button>
       </div>
       <canvas id="photoCanvas" width="360" height="440"></canvas>
