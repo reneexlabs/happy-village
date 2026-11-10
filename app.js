@@ -19,7 +19,10 @@ const OUTLINE = "#4A2E14";  // 진한 테두리 색(초코)
    예: const API_URL = "https://script.google.com/macros/s/XXXX/exec";
    비워 두면 서버 없이 혼자 보는 모드(1단계)로 돌아간다. */
 const API_URL = "https://script.google.com/macros/s/AKfycbxFSjzw_LqL6lQYBBmXxOO8lyC2MoQJDNZ9yLiBwG3kBgjwjDQ2-ZS-0kDd6oDp2HMl/exec";
-const CLASS = (new URLSearchParams(location.search).get("class") || "A").toUpperCase();
+// 주소의 class 값: 반 별명도 받아 준다 (?class=berry → A반)
+const RAW_CLASS = new URLSearchParams(location.search).get("class") || "";
+const CLASS_ALIAS = { BERRY: "A" };
+const CLASS = CLASS_ALIAS[RAW_CLASS.toUpperCase()] || (RAW_CLASS.toUpperCase() === "B" ? "B" : "A");
 const ONLINE = () => API_URL.length > 0;
 const SAVE_KEY = "happybread_me_" + CLASS; // 반마다 따로 기억한다
 
@@ -1247,7 +1250,7 @@ async function idLogin(id) {
     }));
   } catch (e) { /* 무시 */ }
   // 주소에서 id를 지워 둔다 (즐겨찾기해도 깨끗하게)
-  try { history.replaceState(null, "", location.pathname + (CLASS !== "A" ? "?class=" + CLASS : "")); } catch (e) { /* 무시 */ }
+  try { history.replaceState(null, "", location.pathname + (RAW_CLASS ? "?class=" + RAW_CLASS : "")); } catch (e) { /* 무시 */ }
   friends.length = 0;
   startSync();
   sendMyPos(true);
