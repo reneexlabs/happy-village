@@ -21,7 +21,7 @@ const OUTLINE = "#4A2E14";  // 진한 테두리 색(초코)
 const API_URL = "https://script.google.com/macros/s/AKfycbxFSjzw_LqL6lQYBBmXxOO8lyC2MoQJDNZ9yLiBwG3kBgjwjDQ2-ZS-0kDd6oDp2HMl/exec";
 // 주소의 class 값: 반 별명도 받아 준다 (?class=berry → A반)
 const RAW_CLASS = new URLSearchParams(location.search).get("class") || "";
-const CLASS_ALIAS = { BERRY: "A" };
+const CLASS_ALIAS = { BERRY: "A", GRAPE: "B" };
 const CLASS = CLASS_ALIAS[RAW_CLASS.toUpperCase()] || (RAW_CLASS.toUpperCase() === "B" ? "B" : "A");
 const ONLINE = () => API_URL.length > 0;
 const SAVE_KEY = "happybread_me_" + CLASS; // 반마다 따로 기억한다
