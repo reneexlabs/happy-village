@@ -206,6 +206,158 @@ for (const b of BENCHES) {
 // 긴 식탁 테이블 자리도 막는다
 for (let c = LONG_TABLE.c0; c < LONG_TABLE.c0 + LONG_TABLE.w; c++) blocked[LONG_TABLE.r0][c] = true;
 
+/* ---------- 농장: 울타리 + 젖소·닭 (사진관 아래 들판) ----------
+   동물 자리는 시곗바늘(Date.now())만으로 정해지는 사인 곡선이라
+   모든 학생 화면에서 같은 동물이 같은 자리에 보인다. */
+const FARM = { c0: 36, r0: 17, c1: 42, r1: 20, gate: { c: 39, r: 20 } };
+const FARM_FENCE = []; // { c, r, horiz }
+for (let c = FARM.c0; c <= FARM.c1; c++) for (const r of [FARM.r0, FARM.r1]) {
+  if (c === FARM.gate.c && r === FARM.gate.r) continue; // 출입구는 막지 않는다
+  FARM_FENCE.push({ c, r, horiz: true });
+}
+for (let r = FARM.r0 + 1; r < FARM.r1; r++) {
+  FARM_FENCE.push({ c: FARM.c0, r, horiz: false });
+  FARM_FENCE.push({ c: FARM.c1, r, horiz: false });
+}
+for (const f of FARM_FENCE) blocked[f.r][f.c] = true;
+
+// 동물 길: 가운데(cx,cy) + 사인 두 개의 합 (주기 ms, 느리고 작게). 울타리 안에만 머문다
+// 젖소는 농장 왼쪽 절반, 닭은 오른쪽 절반에서만 돌아다닌다 (버튼이 안 섞이게)
+const ANIMALS = [
+  { id: "cow1", kind: "cow", cx: 1524, cy: 744, x: [[18, 46000, 0.3], [6, 29000, 2.0]], y: [[13, 33000, 1.1], [5, 21000, 0.2]] },
+  { id: "cow2", kind: "cow", cx: 1548, cy: 782, x: [[16, 52000, 3.4], [6, 31000, 0.9]], y: [[10, 39000, 4.0], [4, 25000, 2.6]] },
+  { id: "hen1", kind: "hen", cx: 1632, cy: 784, x: [[14, 17000, 1.0], [5, 9000, 0.0]], y: [[10, 13000, 2.2], [4, 8000, 1.4]] },
+  { id: "hen2", kind: "hen", cx: 1646, cy: 736, x: [[12, 19000, 4.2], [5, 11000, 2.8]], y: [[9, 15000, 0.6], [4, 9000, 3.3]] },
+  { id: "hen3", kind: "hen", cx: 1654, cy: 762, x: [[10, 21000, 2.4], [4, 12000, 5.1]], y: [[11, 16000, 3.8], [4, 7000, 0.9]] },
+];
+
+function animalPosAt(a, t) {
+  if (REDUCED) t = 0; // 동작 줄이기: 제자리에 있는다
+  const sum = (terms, tt) => terms.reduce((s, [A, P, ph]) => s + A * Math.sin((2 * Math.PI * tt) / P + ph), 0);
+  const x = a.cx + sum(a.x, t);
+  const y = a.cy + sum(a.y, t);
+  // 바라보는 쪽: 가로 속도의 부호 (아주 느리면 조금 앞 시각을 본다 — 깜빡임 방지)
+  let dir = "right";
+  for (let i = 0; i < 20; i++) {
+    const v = a.x.reduce((s, [A, P, ph]) => s + A * (2 * Math.PI / P) * Math.cos((2 * Math.PI * (t - i * 600)) / P + ph), 0) * 1000;
+    if (Math.abs(v) > 2) { dir = v >= 0 ? "right" : "left"; break; }
+  }
+  return { x, y, dir };
+}
+
+// 젖소: 크림색 몸 + 초코 얼룩 (30x20을 2배로)
+let cowCv = null;
+function cowSprite() {
+  if (cowCv) return cowCv;
+  const W = 30, H = 20;
+  const cv = document.createElement("canvas");
+  cv.width = W; cv.height = H;
+  const x = cv.getContext("2d");
+  const g = Array.from({ length: H }, () => new Array(W).fill(0));
+  const rect = (c0, r0, w, h) => {
+    for (let r = r0; r < r0 + h; r++) for (let c = c0; c < c0 + w; c++)
+      if (c >= 0 && r >= 0 && c < W && r < H) g[r][c] = 1;
+  };
+  rect(4, 6, 20, 9);   // 몸
+  rect(22, 3, 6, 8);   // 머리 (오른쪽)
+  rect(21, 1, 2, 3);   // 귀
+  rect(2, 7, 2, 6);    // 꼬리
+  rect(6, 15, 3, 4); rect(12, 15, 3, 4); rect(17, 15, 3, 4); rect(21, 15, 3, 4); // 다리
+  for (let r = 0; r < H; r++) for (let c = 0; c < W; c++) {
+    if (!g[r][c]) continue;
+    x.fillStyle = r === 18 ? "#5B3A1E" : "#FFF6E6"; // 발굽만 어둡게
+    x.fillRect(c, r, 1, 1);
+  }
+  x.fillStyle = "#8A5A33"; // 초코 얼룩
+  x.fillRect(8, 8, 5, 4); x.fillRect(16, 10, 4, 3); x.fillRect(12, 6, 3, 2);
+  x.fillStyle = "#F7B6C2"; // 분홍 코
+  x.fillRect(26, 8, 2, 3);
+  x.fillStyle = "#3B2512"; // 눈
+  x.fillRect(24, 5, 2, 2);
+  x.fillStyle = OUTLINE;
+  for (let r = 0; r < H; r++) for (let c = 0; c < W; c++) {
+    if (g[r][c]) continue;
+    const near = (g[r - 1] || [])[c] || (g[r + 1] || [])[c] || g[r][c - 1] || g[r][c + 1];
+    if (near) x.fillRect(c, r, 1, 1);
+  }
+  cowCv = cv;
+  return cv;
+}
+
+// 닭: 흰 몸 + 노란 부리 + 볏 (14x14를 2배로)
+let henCv = null;
+function henSprite() {
+  if (henCv) return henCv;
+  const W = 14, H = 14;
+  const cv = document.createElement("canvas");
+  cv.width = W; cv.height = H;
+  const x = cv.getContext("2d");
+  const g = Array.from({ length: H }, () => new Array(W).fill(0));
+  const rect = (c0, r0, w, h) => {
+    for (let r = r0; r < r0 + h; r++) for (let c = c0; c < c0 + w; c++)
+      if (c >= 0 && r >= 0 && c < W && r < H) g[r][c] = 1;
+  };
+  rect(2, 6, 8, 6);   // 몸
+  rect(1, 4, 3, 4);   // 꼬리
+  rect(9, 3, 4, 5);   // 머리 (오른쪽)
+  for (let r = 0; r < H; r++) for (let c = 0; c < W; c++) {
+    if (!g[r][c]) continue;
+    x.fillStyle = "#FFFFFF";
+    x.fillRect(c, r, 1, 1);
+  }
+  x.fillStyle = "#E8453C"; x.fillRect(10, 2, 2, 1);  // 볏
+  x.fillStyle = "#F6C244"; x.fillRect(13, 5, 1, 2);  // 부리
+  x.fillStyle = "#3B2512"; x.fillRect(10, 4, 1, 1);  // 눈
+  x.fillStyle = "#F6A23C"; x.fillRect(4, 12, 1, 2); x.fillRect(7, 12, 1, 2); // 다리
+  x.fillStyle = OUTLINE;
+  for (let r = 0; r < H; r++) for (let c = 0; c < W; c++) {
+    if (g[r][c]) continue;
+    const near = (g[r - 1] || [])[c] || (g[r + 1] || [])[c] || g[r][c - 1] || g[r][c + 1];
+    if (near) x.fillRect(c, r, 1, 1);
+  }
+  henCv = cv;
+  return cv;
+}
+
+// 울타리 한 칸 (나무 말뚝 + 가로장)
+function drawFenceCell(f) {
+  const x = f.c * TILE - cam.x, y = (f.r + 1) * TILE - cam.y;
+  if (x < -50 || x > canvas.width + 50 || y < -60 || y > canvas.height + 60) return;
+  ctx.fillStyle = "rgba(60,40,20,0.14)";
+  ctx.beginPath(); ctx.ellipse(x + 20, y - 2, 18, 4, 0, 0, Math.PI * 2); ctx.fill();
+  const post = (px) => {
+    ctx.fillStyle = "#A96A4D"; ctx.fillRect(px, y - 32, 8, 30);
+    ctx.fillStyle = "#C98A6B"; ctx.fillRect(px + 1, y - 31, 2, 28);
+    ctx.strokeStyle = OUTLINE; ctx.lineWidth = 2; ctx.strokeRect(px, y - 32, 8, 30);
+  };
+  if (f.horiz) {
+    ctx.fillStyle = "#C98A6B";
+    ctx.fillRect(x, y - 26, 40, 6); ctx.fillRect(x, y - 14, 40, 6);
+    ctx.strokeStyle = OUTLINE; ctx.lineWidth = 2;
+    ctx.strokeRect(x, y - 26, 40, 6); ctx.strokeRect(x, y - 14, 40, 6);
+    post(x + 4);
+  } else {
+    ctx.fillStyle = "#C98A6B";
+    ctx.fillRect(x + 8, y - 40, 5, 40); ctx.fillRect(x + 24, y - 40, 5, 40);
+    ctx.strokeStyle = OUTLINE; ctx.lineWidth = 2;
+    ctx.strokeRect(x + 8, y - 40, 5, 40); ctx.strokeRect(x + 24, y - 40, 5, 40);
+    post(x + 14);
+  }
+}
+
+function drawAnimalAt(a, p, now) {
+  const x = p.x - cam.x, y = p.y - cam.y;
+  const bob = REDUCED ? 0 : Math.sin(now / 420 + a.cx) * 1.2;
+  const big = a.kind === "cow";
+  ctx.fillStyle = "rgba(60,40,20,0.16)";
+  ctx.beginPath(); ctx.ellipse(x, y + 2, big ? 24 : 12, 5, 0, 0, Math.PI * 2); ctx.fill();
+  ctx.save();
+  if (p.dir === "left") { ctx.translate(x * 2, 0); ctx.scale(-1, 1); }
+  if (big) ctx.drawImage(cowSprite(), x - 30, y - 38 + bob, 60, 40);
+  else ctx.drawImage(henSprite(), x - 14, y - 26 + bob, 28, 28);
+  ctx.restore();
+}
+
 // 모래사장 꾸밈: 조개와 불가사리
 const SHELLS = [
   { c: 43, r: 8,  k: "shell" }, { c: 43, r: 12, k: "star" },
@@ -672,7 +824,8 @@ function mkIcon(src, cls) {
 // 버튼 내용을 "도트 아이콘 + 글자"로 채우기
 function setBtnIcon(btn, iconName, text) {
   btn.innerHTML = "";
-  if (iconName) btn.appendChild(mkIcon(uiIcon(iconName)));
+  // 이름(문자)이면 공통 아이콘, 캔버스면 그 그림 그대로
+  if (iconName) btn.appendChild(mkIcon(typeof iconName === "string" ? uiIcon(iconName) : iconName));
   btn.appendChild(document.createTextNode(" " + text));
 }
 
@@ -1716,10 +1869,20 @@ async function enterVillage() {
   if (ONLINE() && me.id) sendMyPos(true); // 바뀐 모습을 친구 화면에도 바로
 }
 
+// 왼쪽 위 공지 말풍선: 5초 보이고 천천히 사라진다 (글이 바뀌면 다시 보인다)
+let noticeTimer = 0;
+function showNotice() {
+  const n = $("notice");
+  n.classList.remove("fade");
+  clearTimeout(noticeTimer);
+  noticeTimer = setTimeout(() => n.classList.add("fade"), 5000);
+}
+
 function showVillageScreen(msg) {
   entryEl.classList.add("hidden");
   villageEl.classList.remove("hidden");
   resize();
+  showNotice(); // 환영 말풍선은 5초만 보이고 천천히 사라진다
   showToast(msg); // 들어오면 인사 하나만 잠깐 뜬다
   // 안내 문구는 몇 초 뒤에 사라진다 (간판을 가리지 않게)
   setTimeout(() => {
@@ -1828,8 +1991,11 @@ async function pollState() {
     if (firstStateDone && f.open && !wasOpen) showToast(`${f.name}이(가) 새로 열렸어요!`);
   }
 
-  // 4) 공지: 시트 내용을 그대로 보여 준다 (맨 위 말풍선으로만)
-  if (st.notice) $("noticeText").textContent = st.notice;
+  // 4) 공지: 시트 내용을 그대로 보여 준다. 공지가 바뀌면 다시 5초 보여 준다
+  if (st.notice && $("noticeText").textContent !== st.notice) {
+    $("noticeText").textContent = st.notice;
+    if (firstStateDone) showNotice();
+  }
 
   firstStateDone = true;
 }
@@ -2422,8 +2588,8 @@ const ITEMS = [
   { id: "honey",      name: "꿀",       from: "sea",    shape: "drop",  c: "#F2A33C", deco: "sparkle" },
   { id: "coconut",    name: "코코넛",   from: "sea",    shape: "round", c: "#8A5A33", deco: "seeds" },
   // 땅·풀밭에서 (반짝이는 곳 줍기)
-  { id: "egg",        name: "달걀",     from: "ground", shape: "egg",   c: "#FFF2DC", deco: "sparkle" },
-  { id: "milk",       name: "우유",     from: "ground", shape: "cube",  c: "#F4F7FA", deco: "stripes" },
+  { id: "egg",        name: "달걀",     from: "animal", shape: "egg",   c: "#FFF2DC", deco: "sparkle" }, // 닭에서만
+  { id: "milk",       name: "우유",     from: "animal", shape: "cube",  c: "#F4F7FA", deco: "stripes" }, // 젖소에서만
   { id: "butter",     name: "버터",     from: "ground", shape: "cube",  c: "#F6D44C", deco: "stripes" },
   { id: "sugar",      name: "설탕",     from: "ground", shape: "cube",  c: "#FFFFFF", deco: "sparkle" },
   { id: "chocolate",  name: "초콜릿",   from: "ground", shape: "cube",  c: "#8A5A33", deco: "stripes" },
@@ -2531,7 +2697,8 @@ function updateGroundSpots(now) {
 const dropAnims = [];
 
 const GATHER_KEY = "happybread_gather_" + CLASS;
-const FISH_REST_MIN = 1; // 낚시 쉬는 시간(분). 나무는 시트의 "열매쉬는분"을 그대로 쓴다
+const FISH_REST_MIN = 1;   // 낚시 쉬는 시간(분). 나무는 시트의 "열매쉬는분"을 그대로 쓴다
+const ANIMAL_REST_MIN = 1; // 젖소·닭 쉬는 시간(분)
 let cooldowns = {};
 try { cooldowns = JSON.parse(localStorage.getItem(GATHER_KEY) || "{}"); } catch (e) { /* 무시 */ }
 // 예전 버전이 저장해 둔 긴 바다 쉬기 기록은 1분으로 줄인다
@@ -2565,7 +2732,17 @@ function findGatherSpot() {
     }
   }
   if (tree && treeD < TILE * 2.1) return tree;
-  // 2) 땅의 반짝이는 재료 (바다 낚시는 낚시 자리에 앉아서만 한다: updateFishButton)
+  // 2) 농장 동물: 젖소는 우유, 닭은 달걀 (쉬는 동물은 건너뛴다)
+  let an = null, anD = Infinity;
+  const nowMs = Date.now();
+  for (const a of ANIMALS) {
+    if (coolLeft("a_" + a.id) > 0) continue;
+    const p = animalPosAt(a, nowMs);
+    const d = Math.hypot(me.x - p.x, me.y - p.y);
+    if (d < anD) { anD = d; an = { type: "animal", key: "a_" + a.id, kind: a.kind }; }
+  }
+  if (an && anD < TILE * 1.9) return an;
+  // 3) 땅의 반짝이는 재료 (바다 낚시는 낚시 자리에 앉아서만 한다: updateFishButton)
   for (const s of groundSpots) {
     const d = Math.hypot(me.x - (s.c + 0.5) * TILE, me.y - (s.r + 0.5) * TILE);
     if (d < TILE * 1.8) return { type: "ground", key: "ground", spot: s, c: s.c, r: s.r };
@@ -2592,6 +2769,8 @@ function updateGatherButton(now) {
   }
   if (!gatherSpot || gatherSpot.key !== spot.key || btn.classList.contains("hidden")) {
     if (spot.type === "tree") setBtnIcon(btn, "shake", "흔들기");
+    else if (spot.type === "animal" && spot.kind === "cow") setBtnIcon(btn, itemSprite("milk"), "우유 짜기");
+    else if (spot.type === "animal") setBtnIcon(btn, itemSprite("egg"), "달걀 줍기");
     else setBtnIcon(btn, "spark", "줍기");
     btn.classList.remove("closed");
     btn.classList.remove("hidden");
@@ -2761,8 +2940,18 @@ $("gatherBtn").addEventListener("click", () => {
   if (!spot) return;
   if (spot.type === "tree") doShake(spot);
   else if (spot.type === "fish") fishAction(spot.mode);
+  else if (spot.type === "animal") pickAnimal(spot);
   else pickGround(spot);
 });
+
+// 젖소에서 우유, 닭에서 달걀 (동물마다 1분 쉰다)
+function pickAnimal(spot) {
+  if (coolLeft(spot.key) > 0) return;
+  const pick = ITEMS.find((it) => it.id === (spot.kind === "cow" ? "milk" : "egg"));
+  const isNew = !me.items.has(pick.id);
+  setCooldown(spot.key, undefined, undefined, ANIMAL_REST_MIN);
+  collectCore(pick, isNew);
+}
 
 /* ============================================================
    만빵 제빵소 — 진저브레드 쿠키 굽기 체험
@@ -3201,92 +3390,24 @@ $("dexBtn").addEventListener("click", openDex);
 $("closeDex").addEventListener("click", () => $("dex").classList.add("hidden"));
 
 /* ============================================================
-   사진 찍기 (요구사항 5-5, 서버 없이 화면만)
+   사진 찍기 — 지금 서 있는 실제 화면을 그대로 찰칵
+   화면에 보이는 친구·이름표·장식이 전부 함께 담긴다.
    ============================================================ */
-let photoBg = "office";
-
 function drawPhoto() {
   const cv = $("photoCanvas"), x = cv.getContext("2d");
   x.imageSmoothingEnabled = false;
   const W = cv.width, H = cv.height;
-  // 연한 식빵 들판 바탕 (빵나라 느낌)
-  for (let r = 0; r < H / 20; r++) for (let c = 0; c < W / 20; c++) {
-    x.fillStyle = (c + r) % 2 === 0 ? "#F3E2C0" : "#EDDBB2";
-    x.fillRect(c * 20, r * 20, 20, 20);
-  }
-
-  // 배경 (건물은 작게 위쪽에, 캐릭터와 겹치지 않게)
-  if (photoBg === "office" || photoBg === "cake") {
-    const f = FACILITIES.find((v) => v.id === (photoBg === "office" ? "plaza" : "cake"));
-    x.drawImage(buildingSprite(f), W / 2 - 76, 36, 152, 141);
-  } else if (photoBg === "pond") { // 바닷가
-    x.fillStyle = "#6FC3DE"; x.fillRect(0, 36, W, 96);       // 바다
-    x.fillStyle = "#A8DEEE";
-    for (let i = 0; i < 5; i++) x.fillRect(30 + (i * 61) % (W - 70), 52 + (i * 27) % 64, 16, 4);
-    x.fillStyle = "#F8EED6"; x.fillRect(0, 132, W, 44);      // 설탕 모래
-    x.fillStyle = "#FFFFFF";
-    for (let i = 0; i < 7; i++) x.fillRect(16 + (i * 47) % (W - 30), 140 + (i * 13) % 28, 3, 3);
-    x.fillStyle = "#F3D9A4"; // 조개
-    x.beginPath(); x.ellipse(70, 158, 9, 7, 0, 0, Math.PI * 2); x.fill();
-    x.strokeStyle = OUTLINE; x.lineWidth = 2;
-    x.beginPath(); x.ellipse(70, 158, 9, 7, 0, 0, Math.PI * 2); x.stroke();
-  } else { // 마을 숲 (프레첼 나무)
-    x.drawImage(plantSprite("P"), 34, 60, 60, 80);
-    x.drawImage(plantSprite("P"), W / 2 - 30, 40, 60, 80);
-    x.drawImage(plantSprite("P"), W - 94, 68, 60, 80);
-    x.drawImage(plantSprite("B"), W / 2 + 62, 148, 54, 32);
-  }
-
-  // 발밑 쿠키 길: 타일 여러 장으로 자연스럽게
-  for (let c = 0; c < 5; c++) {
-    for (let r = 0; r < 3; r++) {
-      const tx = W / 2 - 100 + c * 40, ty2 = H - 184 + r * 36;
-      x.fillStyle = (c + r) % 2 === 0 ? "#D9A866" : "#D2A05E";
-      x.fillRect(tx, ty2, 40, 36);
-      x.fillStyle = "#8A5A33";
-      x.fillRect(tx + 8 + ((c * 7 + r * 5) % 14), ty2 + 6 + ((c * 3 + r * 11) % 14), 4, 4);
-    }
-  }
-  x.strokeStyle = "#B8864C";
-  x.lineWidth = 3;
-  x.strokeRect(W / 2 - 100, H - 184, 200, 108);
-
-  // 배경 소품: 캐릭터 가까이에 조금 큰 사탕 꽃과 풀
-  const flowers = [[46, H - 196], [W - 52, H - 186], [70, H - 120], [W - 74, H - 112]];
-  flowers.forEach(([fx, fy], i) => {
-    x.fillStyle = ["#F77C9A", "#FFD66B", "#FFFFFF", "#C9A7E6"][i % 4];
-    x.fillRect(fx - 5, fy, 5, 5); x.fillRect(fx + 5, fy, 5, 5);
-    x.fillRect(fx, fy - 5, 5, 5); x.fillRect(fx, fy + 5, 5, 5);
-    x.fillStyle = "#F6C244"; x.fillRect(fx, fy, 5, 5);
-    x.fillStyle = "#58B368"; x.fillRect(fx + 1, fy + 10, 3, 7);
-  });
-  x.fillStyle = "#B8A868";
-  [[36, H - 158], [W - 42, H - 150]].forEach(([gx, gy]) => {
-    x.fillRect(gx, gy, 3, 9); x.fillRect(gx + 5, gy + 3, 3, 7);
-  });
-
-  // 내 옆 가까이 있는 친구도 같이 찍힌다 (최대 2명)
-  const nearFriends = friends
-    .map((f) => ({ f, d: Math.hypot(f.x - me.x, f.y - me.y) }))
-    .filter((v) => v.d < TILE * 3)
-    .sort((a, b) => a.d - b.d)
-    .slice(0, 2)
-    .map((v) => v.f);
-  nearFriends.forEach((f, i) => {
-    const fx = i === 0 ? W / 2 - 150 : W / 2 + 24;
-    x.fillStyle = "rgba(60,40,20,0.22)";
-    x.beginPath();
-    x.ellipse(fx + 63, H - 102, 38, 9, 0, 0, Math.PI * 2);
-    x.fill();
-    drawBread(x, f.bread, COLORS[f.colorIdx].hex, f.prop, fx, H - 226, 126);
-  });
-
-  // 내 캐릭터: 발 밑에만 그림자 + 항상 맨 앞, 가운데에서 조금 아래
-  x.fillStyle = "rgba(60,40,20,0.25)";
-  x.beginPath();
-  x.ellipse(W / 2, H - 98, 42, 10, 0, 0, Math.PI * 2);
-  x.fill();
-  drawBread(x, me.bread, COLORS[me.colorIdx].hex, me.prop, W / 2 - 80, H - 254, 160);
+  // 액자 안쪽 영역 (아래에는 이름 띠 공간을 남긴다)
+  const ix = 24, iy = 24, iw = W - 48, ih = H - 104;
+  // 내 캐릭터가 가운데(살짝 아래)에 오게 실제 게임 화면을 잘라 온다
+  const k = Math.min(1.3, canvas.width / iw, canvas.height / ih); // 창이 작으면 가능한 만큼만
+  const sw = iw * k, sh = ih * k;
+  let sx = dispX(me) - cam.x - sw / 2;
+  let sy = dispY(me) - cam.y - sh / 2 - 16;
+  sx = Math.max(0, Math.min(canvas.width - sw, sx));
+  sy = Math.max(0, Math.min(canvas.height - sh, sy));
+  x.fillStyle = "#F3E2C0"; x.fillRect(0, 0, W, H);
+  x.drawImage(canvas, sx, sy, sw, sh, ix, iy, iw, ih);
   // 액자 틀
   x.strokeStyle = "#5B3A1E"; x.lineWidth = 14; x.strokeRect(7, 7, W - 14, H - 14);
   x.strokeStyle = "#F6C244"; x.lineWidth = 6; x.strokeRect(17, 17, W - 34, H - 34);
@@ -3304,13 +3425,7 @@ function drawPhoto() {
 
 $("photoBtn").addEventListener("click", () => { drawPhoto(); $("photo").classList.remove("hidden"); });
 $("closePhoto").addEventListener("click", () => $("photo").classList.add("hidden"));
-document.querySelectorAll(".pbg-btn").forEach((b) => {
-  b.addEventListener("click", () => {
-    photoBg = b.dataset.bg;
-    document.querySelectorAll(".pbg-btn").forEach((v) => v.classList.toggle("selected", v === b));
-    drawPhoto();
-  });
-});
+$("retakePhoto").addEventListener("click", () => { drawPhoto(); showToast("다시 찍었어요!"); });
 $("savePhoto").addEventListener("click", () => {
   $("photoCanvas").toBlob((blob) => {
     const a = document.createElement("a");
@@ -4247,6 +4362,12 @@ function loop(now) {
   // 벤치는 캐릭터 뒤에 깔려서, 앉으면 의자 위에 걸터앉은 모습이 보인다
   for (const b of BENCHES) items.push({ y: b.r * TILE + 4, draw: () => drawBenchAt(b) });
   items.push({ y: (LONG_TABLE.r0 + 1) * TILE, draw: drawLongTable }); // 모두 모이는 긴 식탁
+  // 농장 울타리와 동물 (동물 자리는 시간으로 정해져 모두에게 같다)
+  for (const fc of FARM_FENCE) items.push({ y: (fc.r + 1) * TILE, draw: () => drawFenceCell(fc) });
+  for (const a of ANIMALS) {
+    const p = animalPosAt(a, Date.now());
+    items.push({ y: p.y + 2, draw: () => drawAnimalAt(a, p, now) });
+  }
   if (XMAS_FORCE && !XMAS) applyChristmas(true); // 주소에 ?xmas=1 이면 켠다
   if (XMAS) {
     items.push({ y: (XMAS_TREE.r + 1) * TILE, draw: () => drawXmasTree(now) }); // 광장 쿠키 트리
