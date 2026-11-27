@@ -721,7 +721,7 @@ function charSprite(bread, clothes, dir, frame, blink, sit, bag, shoeId) {
 
   // ---- 가방 소품 ----
   if (bag === "backpack") { // 백팩: 뒤에서는 등에 크게, 앞에서는 어깨끈 두 줄, 옆에서는 등 뒤로 볼록
-    const M = "#F2A65A", D = "#D9853F", L = "#F7C08A", S = "#A8642E";
+    const M = "#7E8C52", D = "#5F6B3A", L = "#97A468", S = "#4E3B26"; // 차분한 올리브 카키 (가방다운 색)
     if (back) {
       rc(11, 18, 10, 7, M); rc(11, 18, 10, 2, D);     // 가방 + 덮개
       rc(13, 21, 6, 3, L);                              // 앞주머니
@@ -982,9 +982,9 @@ function propSprite(id) {
 
 /* ---------- 어깨·발 소품 아이콘 (20x20, 테두리 자동) ---------- */
 const GEAR_ICON = {
-  backpack(put) { // 주황 백팩: 손잡이 + 덮개 + 앞주머니
-    put(8, 3, 4, 1, "#A8642E"); put(5, 5, 10, 11, "#F2A65A"); put(5, 5, 10, 3, "#D9853F");
-    put(7, 10, 6, 4, "#F7C08A"); put(9, 8, 2, 1, "#FFE08A");
+  backpack(put) { // 올리브 카키 백팩: 손잡이 + 덮개 + 앞주머니
+    put(8, 3, 4, 1, "#4E3B26"); put(5, 5, 10, 11, "#7E8C52"); put(5, 5, 10, 3, "#5F6B3A");
+    put(7, 10, 6, 4, "#97A468"); put(9, 8, 2, 1, "#FFE08A");
   },
   crossbag(put) { // 남색 크로스백: 둥근 끈 + 작은 가방 + 단추
     put(5, 3, 10, 1, "#8A5A33"); put(4, 4, 1, 6, "#8A5A33"); put(15, 4, 1, 6, "#8A5A33");
@@ -4289,20 +4289,20 @@ const SALT_NEEDS = [
   { id: "egg",    name: "달걀", ga: "이", hint: "닭에게 가 봐요" },
   { id: "salt",   name: "소금", ga: "이", hint: "바다에서 낚시해 봐요" },
 ];
-const BAKE_MAX_G = 100;     // 저울 끝 (10g 단위)
+const BAKE_MAX_G = 160;     // 저울 끝 (10g 단위). 목표가 150g까지라 넘칠 자리를 둔다
 
-// 할 때마다 목표가 바뀐다 (10g 단위, 20~100g). 한 재료는 넘치게 담긴 채로 시작해서 덜기로 맞춘다
+// 할 때마다 목표가 바뀐다 (10g 단위, 20~150g). 한 재료는 넘치게 담긴 채로 시작해서 덜기로 맞춘다
 function makeBakeRecipe(ings) {
   ings = ings || BAKE_INGS;
   const overIdx = Math.floor(Math.random() * ings.length);
   return ings.map((ing, i) => {
     if (i === overIdx) {
-      const target = (2 + Math.floor(Math.random() * 7)) * 10; // 20~80g (넘칠 자리가 있게)
+      const target = (2 + Math.floor(Math.random() * 11)) * 10; // 20~120g (넘칠 자리가 있게)
       const maxOver = Math.min(4, (BAKE_MAX_G - target) / 10);
       const start = target + (1 + Math.floor(Math.random() * maxOver)) * 10; // 10~40g 넘치게
       return { ...ing, target, start };
     }
-    return { ...ing, target: (2 + Math.floor(Math.random() * 9)) * 10, start: 0 }; // 20~100g
+    return { ...ing, target: (2 + Math.floor(Math.random() * 14)) * 10, start: 0 }; // 20~150g
   });
 }
 const BAKE_OVEN_MS = 5000;  // 오븐 5초
@@ -5179,8 +5179,9 @@ function bakeRender() {
       [
         { text: "+10g", click: add(10) },
         { text: "+20g", click: add(20) },
+        { text: "+30g", click: add(30) }, // 무거운 재료도 빨리 맞추게
         { text: "덜기 −10g", click: sub },
-      ]);
+      ], "grid2");
   } else if (s.step === "weighDone") {
     bakeUI("딱 맞아요!", `<div class="bake-g"><b>${s.recipe[s.ingIdx].target}g</b></div>`, []);
   } else if (s.step === "knead") {
