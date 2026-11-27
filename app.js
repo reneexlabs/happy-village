@@ -6,7 +6,7 @@
 
 /* ---------- 기본 설정 ---------- */
 const TILE = 40;            // 타일 한 칸 크기(px)
-const COLS = 48, ROWS = 36; // 마을 크기(타일 수)
+const COLS = 48, ROWS = 42; // 마을 크기(타일 수). 34~35줄 모래, 36줄 데크, 37줄부터 아래쪽 바다
 const WORLD_W = COLS * TILE, WORLD_H = ROWS * TILE;
 const CHAR_SIZE = 72;       // 캐릭터 그리는 크기(px)
 const PLAYER_SPEED = 200;   // 초당 px
@@ -125,20 +125,26 @@ for (let r = 15; r <= 16; r++) {
   for (let c = 44; c <= 46; c++) { ground[r][c] = 6; blocked[r][c] = false; } // 선착장 (걸을 수 있음)
 }
 
-// 가장자리 숲 (위·아래·왼쪽만, 오른쪽은 바다)
+// 아래쪽 바닷가: 모래사장 2줄(34~35) + 데크 줄(36, 8~37열은 나무 데크) + 바다(37줄부터 아래 끝까지)
+const SHORE = { sandTop: 34, deckRow: 36, seaTop: 37, deckC0: 8, deckC1: 37 };
+for (let r = SHORE.sandTop; r <= SHORE.deckRow; r++) for (let c = 2; c <= 43; c++) ground[r][c] = 5;
+for (let c = SHORE.deckC0; c <= SHORE.deckC1; c++) ground[SHORE.deckRow][c] = 6; // 데크 (걸을 수 있음)
+for (let r = SHORE.seaTop; r < ROWS; r++) for (let c = 0; c < COLS; c++) { ground[r][c] = 3; blocked[r][c] = true; }
+
+// 가장자리 숲 (위·왼쪽만, 오른쪽과 아래는 바다)
 const borderTrees = [];
 for (let r = 0; r < ROWS; r++) {
   for (let c = 0; c < COLS; c++) {
     if (ground[r][c] >= 3) continue; // 바다·모래·선착장은 그대로
-    if (r < 2 || r >= ROWS - 2 || c < 2) {
+    if (r < 2 || c < 2) {
       blocked[r][c] = true;
       if ((c * 7 + r * 5) % 2 === 0) borderTrees.push([c, r]);
     }
   }
 }
-// 모래사장 위·아래 끝은 숲으로 막는다
-for (const r of [0, 1, 34, 35]) { blocked[r][43] = true; ground[r][43] = 0; }
-borderTrees.push([43, 0], [43, 34]);
+// 오른쪽 모래사장 위쪽 끝은 숲으로 막는다 (아래쪽 끝은 아래 모래사장과 이어진다)
+for (const r of [0, 1]) { blocked[r][43] = true; ground[r][43] = 0; }
+borderTrees.push([43, 0]);
 
 // 나무 18그루: kind P=프레첼 나무, B=딸기 덤불 / fruit 1=열매 나무
 const TREES = [
@@ -168,28 +174,34 @@ const ROCKS = [
   { c: 29, r: 31, kind: "macaron" }, { c: 12, r: 13, kind: "donut" },
 ];
 for (const k of ROCKS) blocked[k.r][k.c] = true;
+const MACARON_LIFT = 40; // 마카롱 위에 앉을 때 캐릭터를 올려 그리는 높이(px)
 
 // 모두 모이는 긴 식탁: 가운데 큰 테이블, 위·아래 긴 의자에 7명씩 14명이 앉는다
 // 광장에서 떨어진 아래쪽 들판에 둔다 (처음 들어온 화면에는 안 보인다)
 const LONG_TABLE = { c0: 13, r0: 30, w: 7 };
 
-// 바게트 벤치: 마을 3개 + 긴 식탁의 긴 의자 2개 + 선착장의 낚시 자리 3개
+// 바게트 벤치: 마을 3개 + 긴 식탁의 긴 의자 2개 + 전망대 선착장 1개 + 아래쪽 데크의 낚시 자리 6개
 const BENCHES = [
   { c: 20, r: 22 }, { c: 28, r: 22 }, { c: 8, r: 13 },
   { c: LONG_TABLE.c0, r: LONG_TABLE.r0 - 1, w: LONG_TABLE.w, long: true, exitUp: true },
   // 아래쪽 의자는 식탁을 바라보고 앉아서 뒷모습이 보인다
   { c: LONG_TABLE.c0, r: LONG_TABLE.r0 + 1, w: LONG_TABLE.w, long: true, sitUp: true },
-  // 낚시 자리 3개: 선착장 아랫줄 (바로 아래 칸이 바다). 일어나면 윗줄 데크로 올라선다
-  { c: 44, r: 16, fishing: true, exitUp: true },
-  { c: 45, r: 16, fishing: true, exitUp: true },
-  { c: 46, r: 16, fishing: true, exitUp: true },
+  // 오른쪽 선착장(전망대) 끝 벤치: 바로 아래가 바다라서 일어나면 위쪽 데크로 올라선다
+  { c: 46, r: 16, exitUp: true },
 ];
+// 낚시 자리 6개: 데크(36줄) 위, 5칸 간격. 일어나면 위쪽 모래(35줄)로 올라서고, 바로 아래 칸이 바다다
+for (const c of [10, 15, 20, 25, 30, 35]) BENCHES.push({ c, r: SHORE.deckRow, fishing: true, exitUp: true });
+// 마카롱 돌 3개: 모양은 그대로, 위에 한 사람이 올라앉는 의자로도 쓴다 (도넛은 장애물 그대로)
+for (const k of ROCKS) if (k.kind === "macaron") BENCHES.push({ c: k.c, r: k.r, macaron: true });
 for (const b of BENCHES) {
   b.w = b.w || 1;
   for (let i = 0; i < b.w; i++) blocked[b.r][b.c + i] = true;
   if (b.fishing) {
     // 낚시 자리: 방석 한 자리
     b.seats = [{ x: (b.c + 0.5) * TILE, y: b.r * TILE + TILE / 2 - 4 }];
+  } else if (b.macaron) {
+    // 마카롱 의자: 한 자리. 그리는 순서가 마카롱 뒤가 되게 칸 아래쪽에 두고, 그림만 위로 올려 앉힌다
+    b.seats = [{ x: (b.c + 0.5) * TILE, y: (b.r + 1) * TILE + 1 }];
   } else if (b.long) {
     // 긴 의자: 칸마다 한 자리씩 (7자리)
     b.seats = [];
@@ -356,26 +368,33 @@ function drawAnimalAt(a, p, now) {
   if (big) ctx.drawImage(cowSprite(), x - 30, y - 38 + bob, 60, 40);
   else ctx.drawImage(henSprite(), x - 14, y - 26 + bob, 28, 28);
   ctx.restore();
+  // 이 종류가 쉬는 중이면 머리 위에 작은 새싹 (나무가 쉴 때와 같은 표시)
+  if (VILLAGE_CFG.gatherOpen && coolLeft("a_" + a.kind) > 0) {
+    const sy = y - (big ? 52 : 38) + (REDUCED ? 0 : Math.sin(now / 300) * 2);
+    ctx.drawImage(uiIcon("sprout"), x - 9, sy - 9, 18, 18);
+  }
 }
 
 /* ============================================================
-   바다 동물 — 상어 "부캉이", 돌고래 한 쌍, 갈매기 2마리
+   바다 동물 — 상어 "부캉이", 돌고래 한 쌍, 갈매기 4마리
    - 위치는 시곗바늘(Date.now())만으로 정해져서 모든 학생에게 같은 장면이 보인다.
-   - 좁은 세로 바다(44~47열)에 맞게: 좌우로 오가며 위아래로 천천히 옮겨 가는 지그재그.
-     바라보는 쪽은 가로로 가는 방향과 같다.
-   - 구역: 위쪽 바다(상어·갈매기), 낚시 구역(14~19줄, 비움), 아래쪽 바다(돌고래·갈매기).
+   - 상어·돌고래는 아래쪽 넓은 바다에서 옆으로 길게 헤엄치고, 바라보는 쪽은 가는 방향과 같다.
+   - 갈매기는 아래쪽 바다 위 3마리, 오른쪽 바다 위 1마리.
    - 동작 줄이기면 점프·날갯짓·헤엄 모두 멈추고 제자리에 있다.
    ============================================================ */
 const SEA_TAU = Math.PI * 2;
 const SHARK_NAME = "부캉이";
-// [진폭(px), 주기(ms), 위상]. 가로는 짧은 주기(좌우 왕복), 세로는 긴 주기(천천히 옮겨 가기)
-// 상어: 가운데 x 1840 ± 32 → 꼬리(44px)·주둥이까지 바다(1760~1920) 안. y 175~525 (위쪽 바다, 점프 포함)
-const SEA_SHARK = { cx: 1840, x: [[32, 16000, 0]], cy: 350, y: [[150, 120000, 0.4], [25, 47000, 1.7]] };
-// 돌고래: 가운데 x 1840 ± 38, y 900~1275 (둘째는 1.2초 늦게 따라오며 34px 아래)
-const SEA_DOLPHIN = { cx: 1840, x: [[38, 18000, 1.1]], cy: 1086, y: [[160, 100000, 2.2], [25, 41000, 0.3]] };
+// [진폭(px), 주기(ms), 위상]. 아래쪽 넓은 바다(37줄~, y 1480~1680)에서 원본처럼 옆으로 길게 헤엄친다.
+// 찌가 떨어지는 37줄(y 1480~1520)은 점프 꼭대기까지 넣어도 닿지 않는다.
+// 상어: x 160~1760 (꼬리·주둥이 포함 116~1804), y 1631~1659 (등지느러미+점프 꼭대기 ≥ 1561)
+const SEA_SHARK = { cx: 960, x: [[650, 220000, 0], [150, 130000, 1.3]], cy: 1645, y: [[10, 70000, 0.7], [4, 41000, 2.1]] };
+// 돌고래: x 150~1850, y 1589~1611 (둘째는 2.5초 늦게 같은 길을 따라온다)
+const SEA_DOLPHIN = { cx: 1000, x: [[700, 190000, 0], [150, 100000, 0.4]], cy: 1600, y: [[8, 60000, 1.9], [3, 37000, 0]] };
 const SEA_GULLS = [
-  { cx: 1840, cy: 300,  rx: 44, ry: 22, P: 26000, ph: 0.0, wing: 0.0 },
-  { cx: 1838, cy: 1150, rx: 44, ry: 24, P: 31000, ph: 2.1, wing: 0.5 },
+  { cx: 1840, cy: 300,  rx: 44, ry: 22, P: 26000, ph: 0.0, wing: 0.0 },  // 오른쪽 바다 위
+  { cx: 380,  cy: 1615, rx: 130, ry: 22, P: 31000, ph: 2.1, wing: 0.5 }, // 아래쪽 바다 위 3마리
+  { cx: 980,  cy: 1625, rx: 150, ry: 20, P: 24000, ph: 4.0, wing: 0.25 },
+  { cx: 1560, cy: 1612, rx: 130, ry: 24, P: 34000, ph: 5.3, wing: 0.75 },
 ];
 const SHARK_JUMP = { slotMs: 25000, ms: 1200, px: 48 };
 const DOLPHIN_JUMP = { slotMs: 18000, ms: 1000, px: 40 };
@@ -413,8 +432,7 @@ function seaSwimmer(t, P, J, salt, chance) {
 function sharkAt(t) { return seaSwimmer(t, SEA_SHARK, SHARK_JUMP, 1, 0.55); }
 function dolphinsAt(t) {
   const a = seaSwimmer(t, SEA_DOLPHIN, DOLPHIN_JUMP, 3, 0.6);
-  const b = seaSwimmer(t - 1200, SEA_DOLPHIN, DOLPHIN_JUMP, 3, 0.6);
-  b.y += 34;
+  const b = seaSwimmer(t - 2500, SEA_DOLPHIN, DOLPHIN_JUMP, 3, 0.6);
   return [a, b];
 }
 function gullsAt(t) {
@@ -530,6 +548,9 @@ function drawSeaAnimals() {
 const SHELLS = [
   { c: 43, r: 8,  k: "shell" }, { c: 43, r: 12, k: "star" },
   { c: 43, r: 21, k: "star" }, { c: 43, r: 28, k: "shell" },
+  // 아래쪽 모래사장 (장식이라 막지 않는다)
+  { c: 6, r: 34, k: "shell" }, { c: 13, r: 35, k: "star" }, { c: 23, r: 34, k: "star" },
+  { c: 33, r: 35, k: "shell" }, { c: 40, r: 34, k: "shell" },
 ];
 
 // 건물 자리 막기 + 문 앞 칸 기록
@@ -2900,10 +2921,14 @@ const dropAnims = [];
 
 const GATHER_KEY = "happybread_gather_" + CLASS;
 const FISH_REST_MIN = 1;   // 낚시 쉬는 시간(분). 나무는 시트의 "열매쉬는분"을 그대로 쓴다
-const ANIMAL_REST_MIN = 1; // 젖소·닭 쉬는 시간(분)
+const ANIMAL_REST_MIN = 1; // 젖소·닭 쉬는 시간(분). 같은 종류는 함께 쉰다 (젖소 둘, 닭 셋)
 let cooldowns = {};
 try { cooldowns = JSON.parse(localStorage.getItem(GATHER_KEY) || "{}"); } catch (e) { /* 무시 */ }
 // 예전 버전이 저장해 둔 긴 바다 쉬기 기록은 1분으로 줄인다
+// 예전 오른쪽 선착장 자리에 적힌 낚시 쉬기 기록은 새싹 자리를 지운다 (낚시 자리가 아래쪽 데크로 옮겨졌다)
+if (cooldowns.sea && typeof cooldowns.sea === "object" && cooldowns.sea.c >= 44) {
+  cooldowns.sea.c = undefined; cooldowns.sea.r = undefined;
+}
 if (cooldowns.sea) {
   const seaCap = Date.now() + FISH_REST_MIN * 60 * 1000;
   if (cooldowns.sea.t && cooldowns.sea.t > seaCap) cooldowns.sea.t = seaCap;
@@ -2938,10 +2963,10 @@ function findGatherSpot() {
   let an = null, anD = Infinity;
   const nowMs = Date.now();
   for (const a of ANIMALS) {
-    if (coolLeft("a_" + a.id) > 0) continue;
+    if (coolLeft("a_" + a.kind) > 0) continue;
     const p = animalPosAt(a, nowMs);
     const d = Math.hypot(me.x - p.x, me.y - p.y);
-    if (d < anD) { anD = d; an = { type: "animal", key: "a_" + a.id, kind: a.kind }; }
+    if (d < anD) { anD = d; an = { type: "animal", key: "a_" + a.kind, kind: a.kind }; }
   }
   if (an && anD < TILE * 1.9) return an;
   // 3) 땅의 반짝이는 재료 (바다 낚시는 낚시 자리에 앉아서만 한다: updateFishButton)
@@ -3002,23 +3027,115 @@ function collectSprouts(items, now) {
   }
 }
 
-// 재료를 손에 넣었을 때 공통 처리 (폴짝 + 반짝 + 알림 + 저장)
+// 재료를 손에 넣었을 때 공통 처리 (폴짝 + 반짝 + 알림 + 저장 + 도감으로 날아가기 + 중요한 순간 칭찬)
 function collectCore(pick, isNew) {
+  const before = ITEMS.filter((it) => me.items.has(it.id)).length;
   me.items.add(pick.id);
   saveItems();
   me.hopUntil = performance.now() + 300; // 작게 한 번 폴짝
   spawnSparkle(dispX(me) - cam.x, dispY(me) - cam.y - 30, 10);
-  floatItem = { id: pick.id, t0: performance.now() };
   playTone("gather");
   showToast(isNew ? `${pick.name}을(를) 처음 모았어요! 도감에 들어갔어요.` : `${pick.name}이(가) 또 나왔어요.`);
-  if (isNew && me.items.size === ITEMS.length) {
-    setTimeout(() => {
-      showToast("재료 도감을 다 채웠어요! 축하해요!");
-      spawnSparkle(canvas.width / 2, canvas.height / 2, 40);
-      playTone("dex");
-    }, 1400);
+  flyToDex(pick.id, isNew);
+  if (!isNew) return;
+  // 중요한 순간에만 칭찬 배너 (도감 5·10·15·20개, 소금빵 재료 다 모음)
+  const count = ITEMS.filter((it) => me.items.has(it.id)).length;
+  if (count > before) {
+    if (count === ITEMS.length) {
+      showPraise("최고예요!", "재료 도감을 다 채웠어요", true);
+    } else if (count % 5 === 0) {
+      showPraise("잘했어요!", `재료를 ${count}개 모았어요`);
+    }
+    const saltIds = SALT_NEEDS.map((n) => n.id);
+    if (saltIds.includes(pick.id) && saltIds.every((id) => me.items.has(id))) {
+      showPraise("멋져요!", "이제 소금빵을 구울 수 있어요");
+    }
   }
 }
+
+/* ---------- 재료가 도감(책) 버튼으로 날아가기 ----------
+   솟기 0.25초 → 멈춤 0.3초 → 날아가기 0.6초 → 도감 버튼 통 0.15초 (합 1.3초).
+   동작 줄이기면 날지 않고 도감 버튼 옆에 잠깐 나타나고, 버튼은 살짝 밝아지기만 한다. */
+const FLY_MS = 1150;
+let flyBusyUntil = 0; // 칭찬 배너는 날아가기가 끝난 뒤에 나온다
+function flyToDex(itemId, isNew) {
+  const btn = $("dexBtn");
+  if (!btn || !btn.animate) return;
+  const br = btn.getBoundingClientRect();
+  const tx = br.left + br.width / 2, ty = br.top + br.height / 2;
+  const el = document.createElement("div");
+  el.className = "fly-item";
+  const cv = document.createElement("canvas");
+  cv.width = 16; cv.height = 16;
+  const x2 = cv.getContext("2d");
+  x2.imageSmoothingEnabled = false;
+  x2.drawImage(itemSprite(itemId), 0, 0);
+  el.appendChild(cv);
+  document.body.appendChild(el);
+  const done = () => {
+    el.remove();
+    btn.classList.remove("dex-bump");
+    void btn.offsetWidth; // 다시 통 튀게 애니메이션을 처음부터
+    btn.classList.add(REDUCED ? "dex-glow" : "dex-bump");
+    setTimeout(() => btn.classList.remove("dex-bump", "dex-glow"), 400);
+    if (isNew) btn.classList.add("has-new"); // 새로 들어온 재료가 있어요 (도감을 열면 사라진다)
+  };
+  if (REDUCED) {
+    el.style.left = (tx - 64) + "px"; el.style.top = (ty - 22) + "px";
+    el.animate([{ opacity: 0 }, { opacity: 1, offset: 0.3 }, { opacity: 1, offset: 0.7 }, { opacity: 0 }],
+      { duration: 700 }).onfinish = done;
+    flyBusyUntil = performance.now() + 700;
+    return;
+  }
+  const sx = dispX(me) - cam.x, sy = dispY(me) - cam.y - CHAR_SIZE - 10;
+  el.style.left = (sx - 22) + "px"; el.style.top = (sy - 22) + "px";
+  const dx = tx - sx, dy = ty - sy;
+  // 날아갈 때 위로 살짝 휘는 곡선 (가운데 지점을 조금 위로)
+  const mx = dx * 0.5, my = dy * 0.5 - 60;
+  el.animate([
+    { transform: "translate(0px, 10px) scale(0.6)", opacity: 0, offset: 0 },
+    { transform: "translate(0px, -30px) scale(1)", opacity: 1, offset: 0.22 },  // 톡 솟기
+    { transform: "translate(0px, -30px) scale(1)", opacity: 1, offset: 0.48 },  // 잠깐 멈춤
+    { transform: `translate(${mx}px, ${my - 30}px) scale(0.8)`, opacity: 1, offset: 0.74 },
+    { transform: `translate(${dx}px, ${dy}px) scale(0.5)`, opacity: 0.9, offset: 1 }, // 도감 버튼
+  ], { duration: FLY_MS, easing: "ease-in-out" }).onfinish = done;
+  flyBusyUntil = performance.now() + FLY_MS + 150;
+}
+
+/* ---------- 칭찬 배너 (중요한 순간에만, 한 번에 하나씩) ----------
+   위에서 0.3초 내려오고 2.5초 보였다가 0.3초 사라진다. 누르면 바로 닫힌다. 조작을 막지 않는다. */
+const praiseQueue = [];
+let praiseShowing = false, praiseTimer = 0;
+function showPraise(title, text, big) {
+  if (praiseQueue.some((p) => p.text === text)) return; // 같은 칭찬은 한 번만
+  if (praiseQueue.length >= 3) return;
+  praiseQueue.push({ title, text, big });
+  if (!praiseShowing) setTimeout(nextPraise, Math.max(0, flyBusyUntil - performance.now()));
+}
+function nextPraise() {
+  const p = praiseQueue.shift();
+  const el = $("praise");
+  if (!p) { praiseShowing = false; return; }
+  praiseShowing = true;
+  $("praiseTitle").textContent = p.title;
+  $("praiseText").textContent = p.text;
+  el.classList.remove("hidden", "out");
+  void el.offsetWidth;
+  el.classList.add("in");
+  playTone("dex");
+  if (p.big) spawnSparkle(canvas.width / 2, canvas.height / 3, 30);
+  clearTimeout(praiseTimer);
+  praiseTimer = setTimeout(closePraise, 2800);
+}
+function closePraise() {
+  const el = $("praise");
+  if (el.classList.contains("hidden")) return;
+  clearTimeout(praiseTimer);
+  el.classList.remove("in");
+  el.classList.add("out");
+  setTimeout(() => { el.classList.add("hidden"); el.classList.remove("out"); nextPraise(); }, 300);
+}
+$("praise").addEventListener("click", closePraise);
 
 function setCooldown(key, c, r, durMin) {
   cooldowns[key] = { t: Date.now() + durMin * 60 * 1000, c, r };
@@ -3829,6 +3946,7 @@ $("closeBake").addEventListener("click", () => $("bake").classList.add("hidden")
 
 /* ---------- 재료 도감 창 ---------- */
 function openDex() {
+  $("dexBtn").classList.remove("has-new"); // 새로 들어온 재료 표시는 도감을 열면 사라진다
   $("dexCount").textContent = `모은 재료 ${me.items.size} / ${ITEMS.length}`;
   const grid = $("dexGrid");
   grid.innerHTML = "";
@@ -4048,7 +4166,7 @@ function applySeparation(dt) {
   }
   // 낚시 방석을 같이 쓰는 사람들은 살짝 비켜 앉은 것처럼 보인다 (보이는 위치만)
   for (const b of BENCHES) {
-    if (!b.fishing) continue;
+    if (!b.fishing && !b.macaron) continue;
     const seat = b.seats[0];
     const group = chars.filter((c) => Math.abs(c.x - seat.x) < 7 && Math.abs(c.y - seat.y) < 7);
     if (group.length < 2) continue;
@@ -4374,6 +4492,7 @@ function drawPlantAt(c, r, kind, fruit) {
 function drawBenchAt(b) {
   const x = (b.c + b.w / 2) * TILE - cam.x;
   const y = (b.r + 1) * TILE - cam.y;
+  if (b.macaron) return; // 마카롱은 돌 그림을 그대로 쓴다
   if (b.fishing) { // 낚시 자리: 딸기 방석 + 노란 깃발
     ctx.drawImage(fishSpotSprite(), x - 32, y - 40, 56, 40);
     return;
@@ -4660,7 +4779,8 @@ function drawCharacter(ch, isMe, now) {
 
   const x = dispX(ch) - cam.x;
   // 앉으면 엉덩이가 의자 면에 닿게 가라앉힌다 (다리가 의자 앞면에 늘어진다)
-  const y = dispY(ch) - cam.y + walkBob + breath - hop + (sitting ? 13 : 0);
+  // 앉으면 몸을 웅크려 낮게. 마카롱 위에 앉으면 마카롱 높이만큼 올려 그린다
+  const y = dispY(ch) - cam.y + walkBob + breath - hop + (sitting ? (sitting.macaron ? 13 - MACARON_LIFT : 13) : 0);
   const S = CHAR_SIZE;
   const clothes = ch.clothes || COLORS[ch.colorIdx].hex;
 
@@ -4739,7 +4859,7 @@ function layoutAndDrawLabels(dt) {
     const textW = ctx.measureText(ch.name).width;
     const w = textW + 18 + iconW;
     const bx = dispX(ch) - cam.x;
-    const by = dispY(ch) - cam.y - CHAR_SIZE - 4; // 기본 위치: 머리 위
+    const by = dispY(ch) - cam.y - CHAR_SIZE - 4 - (seated && seated.macaron ? MACARON_LIFT - 13 : 0); // 기본 위치: 머리 위
 
     // 빈 자리 찾기 (화면 위·왼쪽·오른쪽으로 잘리는 자리는 건너뛴다)
     let tx = 0, ty = 0, found = false;
@@ -4931,6 +5051,8 @@ function setupIcons() {
   $("photoTitle").prepend(mkIcon(uiIcon("camera")));
   // 공지 말풍선
   $("notice").prepend(mkIcon(uiIcon("megaphone")));
+  // 칭찬 배너의 도트 별
+  $("praiseStar").appendChild(mkIcon(uiIcon("spark")));
 }
 
 /* ============================================================
