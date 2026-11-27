@@ -5635,12 +5635,15 @@ function updateHost(nowMs) {
   npc.dir = st.phase === "back" ? ({ left: "right", right: "left", up: "down", down: "up" })[p.dir] : p.dir;
 }
 
-// 촌장 춤: 식탁에 도착해서 1분 (그 뒤에는 서서 말풍선으로 진행)
+// 촌장 춤: 식탁에 도착해서 1분 + 그 뒤에도 내 화면에 파티 음악이 나오는 동안
+// (소리를 껐거나 식탁에서 멀어 음악이 안 들리면 서서 말풍선으로 진행)
 const HOST_DANCE_MS = 60000;
 function hostDancingNow(nowMs) {
   const st = hostPhase(nowMs);
-  return st.phase === "host" && st.since < HOST_DANCE_MS;
+  if (st.phase !== "host") return false;
+  return st.since < HOST_DANCE_MS || partyMusicPlaying();
 }
+const partyMusicPlaying = () => !!(pbgm.master && pbgm.applied > 0);
 // 파티 진행 말 (식탁에 도착하면 6초, 그 뒤 40초마다 4초씩 차례로)
 const HOST_LINES = ["맛있게 먹어요!", "음악에 맞춰 춤춰요!", "우리 반 최고예요!", "다 같이 모여서 정말 좋아요!"];
 function hostPartyLine(nowMs) {
