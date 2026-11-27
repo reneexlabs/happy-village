@@ -81,7 +81,7 @@ const PROPS = [
   { id: "ribbon",    name: "리본",     emoji: "🎀", unlocked: true },
   { id: "chefhat",   name: "셰프 모자", emoji: "✨", unlocked: true },
   { id: "headphone", name: "헤드폰",   emoji: "🎧", unlocked: false },
-  { id: "cape",      name: "별 망토",  emoji: "⭐", unlocked: false },
+  { id: "cape",      name: "별 망토",  emoji: "⭐", unlocked: false, slot: "bag" }, // 어깨 칸 (백팩·크로스백과 하나만)
   // 어깨 (가방) · 발 (신발): 머리 소품과 함께 쓸 수 있다
   { id: "backpack",    name: "백팩",     emoji: "🎒", unlocked: false, slot: "bag" },
   { id: "crossbag",    name: "크로스백", emoji: "👜", unlocked: false, slot: "bag" },
@@ -729,12 +729,14 @@ function charSprite(bread, clothes, dir, frame, blink, sit, bag, shoeId) {
     } else if (side) {
       rc(8, 18, 4, 7, M); rc(8, 18, 4, 2, D); rc(8, 21, 2, 3, L); // 등 뒤로 볼록
       rc(12, 18, 1, 5, S);                                         // 어깨끈
-    } else {
-      rc(12, 18, 1, 6, S); rc(19, 18, 1, 6, S);         // 어깨끈 두 줄
-      set(12, 21, D); set(19, 21, D);                   // 끈 고리
+    } else { // 앞모습: 끈은 어깨에만 짧게 (멜빵처럼 보이지 않게) + 몸 양옆으로 가방이 살짝 보인다
+      set(12, 18, S); set(12, 19, S); set(11, 20, S);   // 왼쪽 어깨끈 (겨드랑이 쪽으로)
+      set(19, 18, S); set(19, 19, S); set(20, 20, S);   // 오른쪽 어깨끈
+      rc(8, 19, 1, 5, M); rc(23, 19, 1, 5, M);          // 팔 바깥으로 삐져나온 가방
+      set(8, 23, D); set(23, 23, D);
     }
-  } else if (bag === "crossbag") { // 크로스백: 끈이 몸을 가로지르고, 허리 옆에 작은 가방
-    const P = "#F7A8C4", D = "#D9608A", S = "#8A5A33";
+  } else if (bag === "crossbag") { // 크로스백: 끈이 몸을 가로지르고, 허리 옆에 작은 가방 (누구나 어울리는 남색)
+    const P = "#5B7DB1", D = "#3F5E8F", S = "#8A5A33";
     if (side) {
       for (let i = 0; i < 5; i++) set(14 + i, 18 + i, S);
       rc(17, 22, 4, 3, P); rc(17, 22, 4, 1, D); set(19, 23, "#FFE08A");
@@ -864,22 +866,25 @@ const HEAD_PROPS = ["ribbon", "chefhat", "headphone"];
 function drawBread(x, breadId, clothesHex, propId, sx, sy, S, dir = "down", frame = 0, blink = false, sit = false) {
   const gear = propId && typeof propId === "object" ? propId : { head: propId }; // 머리 소품 하나만 줘도 된다
   propId = keepProp(gear.head); // 없앤 소품은 그리지 않는다 (아직 새로고침하지 않은 친구가 보내도)
+  const capeOn = gear.bag === "cape" || propId === "cape"; // 별 망토는 어깨 칸 (예전 기록은 머리 칸에 있을 수 있다)
+  if (propId === "cape") propId = null;
   const scale = S / 32;
   const back = dir === "up";
   // 앉으면 몸을 웅크려 조금 낮아진다 (발 위치는 그대로)
   const squash = sit ? 0.86 : 1;
   const draw = (img, dx, dy) => x.drawImage(img, sx + dx * scale, sy + (dy + 32 * (1 - squash)) * scale, S, S * squash);
-  if (propId === "cape" && !back) draw(propSprite(dir === "side" ? "cape_side" : "cape_front"), 0, 6); // 앞에서는 어깨 뒤로 살짝, 옆에서는 등 뒤로만
-  draw(charSprite(breadId, clothesHex, dir, frame, blink, sit, gearOk(gear.bag, "bag"), gearOk(gear.shoe, "shoe")), 0, 0); // 가방·신발은 캐릭터 그림 안에
+  if (capeOn && !back) draw(propSprite(dir === "side" ? "cape_side" : "cape_front"), 0, 6); // 앞에서는 어깨 뒤로 살짝, 옆에서는 등 뒤로만
+  const bagId = capeOn ? null : gearOk(gear.bag, "bag"); // 어깨 칸: 망토면 가방은 없다
+  draw(charSprite(breadId, clothesHex, dir, frame, blink, sit, bagId, gearOk(gear.shoe, "shoe")), 0, 0); // 가방·신발은 캐릭터 그림 안에
   if (propId === "scarf") draw(propSprite("scarf"), 0, 0); // 목도리는 앞·뒤 모두 목에 두른다
-  else if (propId && propId !== "cape") {
+  else if (propId) {
     const headProp = HEAD_PROPS.includes(propId);
     if (!back || headProp) { // 뒤에서는 머리 소품만 보인다
       if (propId === "headphone" && dir === "side") draw(propSprite("headphone_side"), 2, -1); // 옆모습 전용 헤드폰
       else draw(propSprite(propId), headProp && dir === "side" ? 2 : 0, headProp ? -3 : 4);
     }
   }
-  if (propId === "cape" && back) draw(propSprite("cape"), 0, 6); // 뒤에서는 망토가 몸을 덮는다
+  if (capeOn && back) draw(propSprite("cape"), 0, 6); // 뒤에서는 망토가 몸을 덮는다
 }
 
 /* ---------- 소품 스프라이트 (캐릭터 위에 겹쳐 그림) ---------- */
@@ -981,9 +986,9 @@ const GEAR_ICON = {
     put(8, 3, 4, 1, "#A8642E"); put(5, 5, 10, 11, "#F2A65A"); put(5, 5, 10, 3, "#D9853F");
     put(7, 10, 6, 4, "#F7C08A"); put(9, 8, 2, 1, "#FFE08A");
   },
-  crossbag(put) { // 분홍 크로스백: 둥근 끈 + 작은 가방 + 단추
+  crossbag(put) { // 남색 크로스백: 둥근 끈 + 작은 가방 + 단추
     put(5, 3, 10, 1, "#8A5A33"); put(4, 4, 1, 6, "#8A5A33"); put(15, 4, 1, 6, "#8A5A33");
-    put(4, 10, 12, 6, "#F7A8C4"); put(4, 10, 12, 2, "#D9608A"); put(9, 12, 2, 1, "#FFE08A");
+    put(4, 10, 12, 6, "#5B7DB1"); put(4, 10, 12, 2, "#3F5E8F"); put(9, 12, 2, 1, "#FFE08A");
   },
   furboots(put) { // 털부츠 한 켤레
     for (const c0 of [2, 11]) { put(c0, 4, 5, 2, "#FFF6EC"); put(c0, 6, 5, 7, "#A0643A"); put(c0, 13, 7, 2, "#A0643A"); put(c0, 15, 7, 1, "#6E4326"); }
@@ -2162,6 +2167,7 @@ function setupEntry() {
       me.prop = keepProp(saved.prop);
       me.bagProp = gearOk(saved.bagProp, "bag");
       me.shoeProp = gearOk(saved.shoeProp, "shoe");
+      moveCapeToShoulder();
       me.items = migrateItems(new Set(saved.items || []));
       me.fish = parseFish((saved.fish || []).join(","));
       me.gifts = parseGifts((saved.gifts || []).join(","));
@@ -3206,17 +3212,25 @@ function sendGear() {
   api({ action: "prop", class: CLASS, id: me.id, prop: me.prop || "", bagp: me.bagProp || "", shoe: me.shoeProp || "" });
   sendMyPos(true);
 }
+// 예전에 머리 칸("소품")에 쓰던 별 망토는 어깨 칸으로 옮긴다 (어깨가 비어 있을 때)
+function moveCapeToShoulder() {
+  if (me.prop !== "cape") return;
+  me.prop = null;
+  if (!me.bagProp) me.bagProp = "cape";
+}
 // 들어올 때: 시트의 어깨·발 칸 (새 Code.gs 전이면 이 컴퓨터에 남은 같은 학생 기록)
 function applyServerGear(res) {
   if (res.bagProp !== undefined || res.shoeProp !== undefined) {
     me.bagProp = gearOk(res.bagProp, "bag");
     me.shoeProp = gearOk(res.shoeProp, "shoe");
+    moveCapeToShoulder();
     return;
   }
   let saved = null;
   try { const v = JSON.parse(localStorage.getItem(SAVE_KEY) || "null"); if (v && v.id === res.id) saved = v; } catch (e) { /* 무시 */ }
   me.bagProp = saved ? gearOk(saved.bagProp, "bag") : null;
   me.shoeProp = saved ? gearOk(saved.shoeProp, "shoe") : null;
+  moveCapeToShoulder();
 }
 
 function refreshBag() {
