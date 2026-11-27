@@ -5664,14 +5664,15 @@ $("closeBasket").addEventListener("click", () => $("basket").classList.add("hidd
 $("basket").addEventListener("click", (e) => { if (e.target === $("basket")) $("basket").classList.add("hidden"); }); // 바깥을 눌러도 닫힌다
 
 /* ============================================================
-   식탁 파티 음악 — 우리 반 바구니를 다 채우면 30분 동안 긴 식탁에서 흐른다
+   식탁 파티 음악 — 우리 반 바구니를 다 채우면 10분 동안 긴 식탁에서 흐른다
    (study 폴더 partybgm.js의 곡을 그대로: 다장조 8비트 멜로디, 1분에 120박, 16초 곡)
    - 식탁 가까이(3칸 안) 가장 크게, 멀어질수록 작아지고 12칸부터는 들리지 않는다.
    - 효과음을 끄면 함께 꺼진다. 탭이 숨겨지거나 마을 밖이면 1초 안에 작아진다.
    - 시계에 맞춰 연주한다: 모든 컴퓨터에서 같은 순간에 같은 부분이 나온다.
    - 아주 작게: 한 음은 0.05 이하로, 효과음(0.11)보다 작다.
    ============================================================ */
-const PARTY_MS = 30 * 60 * 1000;   // 다 채운 뒤 30분
+const PARTY_MS = 10 * 60 * 1000;   // 다 채운 뒤 10분: 파티 음악·식탁 근처 춤·색종이·촌장 진행
+const DECOR_MS = 30 * 60 * 1000;   // 깃발·풍선·접시 빵은 30분 동안 남겨 둔다 (파티가 끝나도 잔치 분위기)
 const PBGM_NOTE_VOL = 0.05;
 const PBGM_NEAR_PX = 120, PBGM_FAR_PX = 480;
 const PBGM_MELODY = [
@@ -5718,11 +5719,14 @@ function tableDistPx(x, y) {
 function partyOn(nowMs) {
   return !!(basketState && basketState.done && basketState.doneAt && nowMs < basketState.doneAt + PARTY_MS);
 }
+function decorOn(nowMs) {
+  return !!(basketState && basketState.done && basketState.doneAt && nowMs < basketState.doneAt + DECOR_MS);
+}
 
 /* ============================================================
    반죽 촌장: 파티 진행자 + 말 걸면 도움말 한 줄
    - 파티가 시작되면(바구니 다 채운 시각) 광장에서 식탁 오른쪽 끝까지 걸어가서 진행하고,
-     30분이 지나면 광장으로 돌아간다. 자리는 시계(Date.now())와 정해진 길만으로 정해져서
+     10분이 지나면 광장으로 돌아간다. 자리는 시계(Date.now())와 정해진 길만으로 정해져서
      모든 학생 화면에서 같은 자리에 보인다 (통신 없음).
    - 파티 동안 식탁 앞에서 같이 춤추고, 가끔 머리 위 말풍선으로 말한다.
    - 매일 미션 대화를 들은 뒤 촌장을 누르면, 그때 나에게 맞는 도움말을 한 줄 말한다 (누를 때마다 바뀜)
@@ -6659,8 +6663,8 @@ function drawLongTable() {
     ctx.strokeStyle = "#D9C9A8"; ctx.lineWidth = 1.5;
     ctx.beginPath(); ctx.ellipse(px, y + 1, 10, 5, 0, 0, Math.PI * 2); ctx.stroke();
   }
-  // 파티 30분 동안: 깃발 줄·풍선, 접시마다 빵
-  if (partyOn(Date.now())) { drawPartyDecor(x, y, w); drawPartyPlates(x, y); }
+  // 다 채운 뒤 30분 동안: 깃발 줄·풍선, 접시마다 빵 (음악·춤·색종이는 10분)
+  if (decorOn(Date.now())) { drawPartyDecor(x, y, w); drawPartyPlates(x, y); } // 깃발·풍선·빵은 30분
   // 가운데 컵 (우리 반 바구니를 다 채우면 컵 대신 큰 식빵)
   if (basketState && basketState.done) {
     ctx.drawImage(loafSprite(), x + w / 2 - 39, y - 50, 78, 66); // 3배 크기 도트
@@ -6944,7 +6948,7 @@ function seatedInfo(ch) {
 
 /* ---------- 파티 춤 ----------
    - 바구니를 다 채운 순간: 8초 동안 나와 친구들 모두
-   - 파티 30분 동안: 식탁 가까이(음악이 크게 들리는 곳)에 있는 캐릭터만
+   - 파티 10분 동안: 식탁 가까이(음악이 크게 들리는 곳)에 있는 캐릭터만
    - 박자는 파티 음악과 같은 벽시계(120BPM)라 모든 학생 화면에서 같이 춘다
    - 서 있으면 박자마다 통통 + 왼쪽 2박 → 오른쪽 1박 → 앞을 보고 크게 1박, 앉아 있으면 들썩들썩
    - 걷는 중·낚시 중에는 추지 않는다. 동작 줄이기면 움직이지 않고 머리 위에 ♪만 */
@@ -7198,7 +7202,7 @@ function loop(now) {
   updateGatherButton(now); // 열매 나무·바다·반짝이 근처면 줍기 버튼 보이기
   updateGroundSpots(now);  // 땅의 반짝이는 재료 자리 관리
   updateMission();         // 사무소 캐릭터 대화와 미션 도착 확인
-  updatePartyBgm();        // 바구니를 다 채운 뒤 30분: 식탁 가까이 가면 파티 음악
+  updatePartyBgm();        // 바구니를 다 채운 뒤 10분: 식탁 가까이 가면 파티 음악
   updateHost(Date.now());  // 파티 동안 반죽 촌장은 식탁에서 진행 (모두에게 같은 자리)
   updateGiftOffer(now);    // 선생님 선물 카드 (공지·미션 대화가 끝난 뒤에)
   updateRipple(now);       // 물결 맞추기 (물고기를 낚을 때)
