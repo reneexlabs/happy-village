@@ -3333,7 +3333,7 @@ function itemSprite(id) {
 
 // 재료 뽑기: 아직 못 모은 재료가 먼저, 꽝은 없다
 // 소금빵 재료는 아직 없으면 그곳에서 가장 먼저 나온다 (그다음부터는 무작위)
-const FIRST_PICK = { sea: "salt", tree: "wheat", ground: "butter" };
+const FIRST_PICK = { tree: "wheat", ground: "butter" }; // 바다는 처음에도 정해진 것 없이 확률대로
 
 function pickFrom(fromType) {
   const first = FIRST_PICK[fromType];
@@ -3606,8 +3606,9 @@ const FISH = [
   { id: "hairtail", name: "갈치" },
   { id: "flatfish", name: "광어" },
 ];
-const SALT_CHANCE = 1 / 3; // 던질 때마다 소금 1/3
-const FISH_CHANCE = 1 / 3; // 물고기 1/3 (아직 못 낚은 것이 먼저), 나머지 1/3은 다른 바다 재료
+const SALT_CHANCE = 0.3; // 던질 때마다 소금 30%
+const SEA_WEIGHT = { coconut: 1.5 }; // 다른 바다 재료 중 코코넛만 조금 더 자주
+const FISH_CHANCE = 0.3; // 물고기 30% (아직 못 낚은 것이 먼저), 나머지 40%는 다른 바다 재료
 function parseFish(text) {
   const valid = new Set(FISH.map((f) => f.id));
   return new Set(String(text || "").split(",").map((s) => s.trim()).filter((s) => valid.has(s)));
@@ -3696,10 +3697,8 @@ function fishSprite(id) {
   return cv;
 }
 
-// 낚을 것 고르기: 소금이 없으면 소금 먼저(그대로).
-// 그다음은 소금 1/3 · 물고기 1/3 · 다른 바다 재료 1/3 (소금빵에 소금이 늘 필요해서 소금을 자주)
+// 낚을 것 고르기: 소금 30% · 물고기 30% · 다른 바다 재료 40% (코코넛은 그중 조금 더 자주)
 function pickCatch() {
-  if (FIRST_PICK.sea && !me.items.has(FIRST_PICK.sea)) return { item: pickFrom("sea") };
   const roll = Math.random();
   if (roll < SALT_CHANCE) return { item: ITEMS.find((it) => it.id === "salt") };
   if (roll < SALT_CHANCE + FISH_CHANCE) {
@@ -3710,7 +3709,11 @@ function pickCatch() {
   const others = ITEMS.filter((it) => it.from === "sea" && it.id !== "salt"); // 아직 못 모은 것이 먼저
   const fresh = others.filter((it) => !me.items.has(it.id));
   const from = fresh.length ? fresh : others;
-  return { item: from[Math.floor(Math.random() * from.length)] };
+  // 코코넛은 다른 바다 재료보다 조금 더 자주 (무게 1.5, 나머지는 1)
+  const wOf = (it) => SEA_WEIGHT[it.id] || 1;
+  let r = Math.random() * from.reduce((n, it) => n + wOf(it), 0);
+  for (const it of from) { r -= wOf(it); if (r < 0) return { item: it }; }
+  return { item: from[from.length - 1] };
 }
 
 /* ---------- 낚아채는 모션 (약 1초, 흔들림·번쩍임 없음) ----------
@@ -4267,7 +4270,7 @@ const SALT_INGS = [         // 소금빵 계량 재료
 // 소금빵에 필요한 도감 재료 (구워도 없어지지 않는다)
 const SALT_NEEDS = [
   { id: "wheat",  name: "밀",  ga: "이", hint: "나무를 흔들어 봐요" },
-  { id: "butter", name: "버터", ga: "가", hint: "땅에서 반짝이는 곳을 찾아봐요" },
+  { id: "butter", name: "버터", ga: "가", hint: "반짝이를 찾아봐요" },
   { id: "milk",   name: "우유", ga: "가", hint: "젖소에게 가 봐요" },
   { id: "egg",    name: "달걀", ga: "이", hint: "닭에게 가 봐요" },
   { id: "salt",   name: "소금", ga: "이", hint: "바다에서 낚시해 봐요" },
@@ -4596,7 +4599,7 @@ const MERINGUE_INGS = [      // 머랭 계량 재료
 ];
 const MERINGUE_NEEDS = [     // 1층 머랭에 필요한 도감 재료
   { id: "egg",   name: "달걀", ga: "이", hint: "닭에게 가 봐요" },
-  { id: "sugar", name: "설탕", ga: "이", hint: "땅에서 반짝이는 곳을 찾아봐요" },
+  { id: "sugar", name: "설탕", ga: "이", hint: "반짝이를 찾아봐요" },
 ];
 // 2층 크림 4가지 (도감 재료로만)
 const CREAMS = [
@@ -4629,7 +4632,7 @@ function itemHint(id) {
   if (!it) return "마을을 둘러봐요";
   if (it.from === "tree") return "나무를 흔들어 봐요";
   if (it.from === "sea") return "바다에서 낚시해 봐요";
-  return "땅에서 반짝이는 곳을 찾아봐요";
+  return "반짝이를 찾아봐요";
 }
 const itemName = (id) => (ITEMS.find((v) => v.id === id) || { name: id }).name;
 
@@ -6554,8 +6557,8 @@ function drawPlantAt(c, r, kind, fruit) {
       ctx.fillStyle = "rgba(255,255,255,0.92)";
       ctx.fillRect(x - 16 + off, y - 36, 14, 4); ctx.fillRect(x + 2 + off, y - 39, 13, 4);
     }
-    if (showFruit) { // 흔들 수 있는 덤불: 빨간 딸기 알갱이 3개 (나무 열매처럼)
-      for (const [dx, dy] of [[-17, -24], [-3, -30], [10, -20]]) {
+    if (showFruit) { // 흔들 수 있는 덤불: 빨간 딸기 알갱이 하나 (너무 많아 보이지 않게)
+      for (const [dx, dy] of [[-3, -30]]) {
         const fx = x + dx + ((h >> (dx & 7)) % 4) + off, fy = y + dy;
         ctx.fillStyle = OUTLINE; ctx.fillRect(fx - 1, fy - 1, 8, 8);
         ctx.fillStyle = "#E8453C"; ctx.fillRect(fx, fy, 6, 6);
