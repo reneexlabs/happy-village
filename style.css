@@ -769,3 +769,9 @@ h1 .ui-ico, h2 .ui-ico { width: 26px; height: 26px; vertical-align: -3px; }
 /* 공지 말풍선: 5초 뒤 천천히 사라진다 (깜빡임 없이) */
 .notice { transition: opacity 1.6s ease; }
 .notice.fade { opacity: 0; pointer-events: none; }
+
+/* 소금빵 재료 확인 칸 */
+.bake-needs { display: flex; gap: 8px; justify-content: center; flex-wrap: wrap; }
+.bake-need { width: 72px; min-height: 84px; display: flex; flex-direction: column; align-items: center; justify-content: center; gap: 4px; background: #F2ECE2; border: 3px solid #B9AE9C; border-radius: 14px; font-size: 22px; font-weight: 700; color: #8C8475; }
+.bake-need canvas { width: 44px; height: 44px; image-rendering: pixelated; }
+.bake-need.got { background: #E6F5E2; border-color: #4E9A55; color: #2F6B33; }

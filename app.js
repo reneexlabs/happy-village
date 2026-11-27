@@ -358,6 +358,174 @@ function drawAnimalAt(a, p, now) {
   ctx.restore();
 }
 
+/* ============================================================
+   바다 동물 — 상어 "부캉이", 돌고래 한 쌍, 갈매기 2마리
+   - 위치는 시곗바늘(Date.now())만으로 정해져서 모든 학생에게 같은 장면이 보인다.
+   - 좁은 세로 바다(44~47열)에 맞게: 좌우로 오가며 위아래로 천천히 옮겨 가는 지그재그.
+     바라보는 쪽은 가로로 가는 방향과 같다.
+   - 구역: 위쪽 바다(상어·갈매기), 낚시 구역(14~19줄, 비움), 아래쪽 바다(돌고래·갈매기).
+   - 동작 줄이기면 점프·날갯짓·헤엄 모두 멈추고 제자리에 있다.
+   ============================================================ */
+const SEA_TAU = Math.PI * 2;
+const SHARK_NAME = "부캉이";
+// [진폭(px), 주기(ms), 위상]. 가로는 짧은 주기(좌우 왕복), 세로는 긴 주기(천천히 옮겨 가기)
+// 상어: 가운데 x 1840 ± 32 → 꼬리(44px)·주둥이까지 바다(1760~1920) 안. y 175~525 (위쪽 바다, 점프 포함)
+const SEA_SHARK = { cx: 1840, x: [[32, 16000, 0]], cy: 350, y: [[150, 120000, 0.4], [25, 47000, 1.7]] };
+// 돌고래: 가운데 x 1840 ± 38, y 900~1275 (둘째는 1.2초 늦게 따라오며 34px 아래)
+const SEA_DOLPHIN = { cx: 1840, x: [[38, 18000, 1.1]], cy: 1086, y: [[160, 100000, 2.2], [25, 41000, 0.3]] };
+const SEA_GULLS = [
+  { cx: 1840, cy: 300,  rx: 44, ry: 22, P: 26000, ph: 0.0, wing: 0.0 },
+  { cx: 1838, cy: 1150, rx: 44, ry: 24, P: 31000, ph: 2.1, wing: 0.5 },
+];
+const SHARK_JUMP = { slotMs: 25000, ms: 1200, px: 48 };
+const DOLPHIN_JUMP = { slotMs: 18000, ms: 1000, px: 40 };
+
+function seaHash(a, b) {
+  let h = Math.imul((a | 0) ^ 0x9e3779b9, 0x85ebca6b) ^ Math.imul((b | 0) + 0x7f4a7c15, 0xc2b2ae35);
+  h ^= h >>> 16; h = Math.imul(h, 0x45d9f3b);
+  h ^= h >>> 13; h = Math.imul(h, 0x45d9f3b);
+  h ^= h >>> 16;
+  return (h >>> 0) / 4294967296;
+}
+const seaSines = (terms, t) => terms.reduce((s, [A, P, ph]) => s + A * Math.sin((SEA_TAU * t) / P + ph), 0);
+const seaDSines = (terms, t) => terms.reduce((s, [A, P, ph]) => s + A * (SEA_TAU / P) * Math.cos((SEA_TAU * t) / P + ph) * 1000, 0);
+// 가로 속도가 애매하면 조금 앞 시각으로 물러나 방향을 찾는다 (방향이 깜빡이지 않는다)
+function seaDir(dx, t) {
+  for (let i = 0; i < 40; i++) {
+    const v = dx(t - i * 700);
+    if (Math.abs(v) > 2) return v > 0 ? "right" : "left";
+  }
+  return "right";
+}
+function seaJumpAt(t, J, salt, chance) {
+  const k = Math.floor(t / J.slotMs);
+  if (seaHash(k, salt) < chance) {
+    const start = k * J.slotMs + 2000 + seaHash(k, salt + 1) * (J.slotMs - 4000 - J.ms);
+    if (t >= start && t < start + J.ms) return { lift: J.px * Math.sin(Math.PI * (t - start) / J.ms), jumping: true };
+  }
+  return { lift: 0, jumping: false };
+}
+function seaSwimmer(t, P, J, salt, chance) {
+  if (REDUCED) t = 0; // 동작 줄이기: 제자리
+  const jump = REDUCED ? { lift: 0, jumping: false } : seaJumpAt(t, J, salt, chance);
+  return { x: P.cx + seaSines(P.x, t), y: P.cy + seaSines(P.y, t), dir: seaDir((s) => seaDSines(P.x, s), t), ...jump };
+}
+function sharkAt(t) { return seaSwimmer(t, SEA_SHARK, SHARK_JUMP, 1, 0.55); }
+function dolphinsAt(t) {
+  const a = seaSwimmer(t, SEA_DOLPHIN, DOLPHIN_JUMP, 3, 0.6);
+  const b = seaSwimmer(t - 1200, SEA_DOLPHIN, DOLPHIN_JUMP, 3, 0.6);
+  b.y += 34;
+  return [a, b];
+}
+function gullsAt(t) {
+  if (REDUCED) t = 0;
+  return SEA_GULLS.map((g) => {
+    const a = (SEA_TAU * t) / g.P + g.ph;
+    const n = Math.floor(t / 400 + g.wing);
+    return {
+      x: g.cx + g.rx * Math.cos(a), y: g.cy + g.ry * Math.sin(a),
+      dir: seaDir((s) => -g.rx * (SEA_TAU / g.P) * 1000 * Math.sin((SEA_TAU * s) / g.P + g.ph), t),
+      wing: REDUCED ? 0 : ((n % 2) + 2) % 2,
+    };
+  });
+}
+
+// ---- 그림 (원본 도트 그림, 2배. 오른쪽을 보는 모양을 그리고 왼쪽이면 뒤집는다) ----
+const SEA_U = 2;
+const SEA_INK = "#2A3A4A", SEA_MOUTH = "#4A5A6A", SEA_BLUSH = "#F2B8C0", SEA_LINE = "#4E6E85", SEA_DEEP = "#58AFCE";
+const seaDot = (c2, x, y, w, h, col, u = SEA_U) => { c2.fillStyle = col; c2.fillRect(x * u, y * u, w * u, h * u); };
+const seaRows = (c2, list, col, u = SEA_U) => { c2.fillStyle = col; for (const [y, a, b] of list) c2.fillRect(a * u, y * u, (b - a) * u, u); };
+const seaOutline = (c2, list) => {
+  const o = [];
+  for (const [y, a, b] of list) o.push([y, a - 1, b + 1], [y - 1, a, b], [y + 1, a, b]);
+  seaRows(c2, o, SEA_LINE);
+};
+function seaPlace(sx, sy, dir, draw) {
+  ctx.save();
+  ctx.translate(Math.round(sx), Math.round(sy));
+  if (dir === "left") ctx.scale(-1, 1);
+  draw(ctx);
+  ctx.restore();
+}
+function seaSubmerge(c2, bodyRows, extra, x0, x1, line) { // 몸 아래쪽은 물에 잠겨 보인다
+  c2.globalAlpha = 0.55;
+  seaRows(c2, bodyRows.filter((r) => r[0] >= line), SEA_DEEP);
+  for (const [x, y, w, h] of extra) seaDot(c2, x, y, w, h, SEA_DEEP);
+  c2.globalAlpha = 1;
+  seaDot(c2, x0, line, 3, 1, "#BFE8F5");
+  seaDot(c2, x1 - 3, line, 3, 1, "#BFE8F5");
+}
+const SHARK_ROWS = [
+  [-7, -8, 6], [-6, -11, 10], [-5, -13, 12], [-4, -14, 14], [-3, -15, 15], [-2, -15, 16], [-1, -16, 16],
+  [0, -16, 16], [1, -16, 16], [2, -15, 15], [3, -14, 14], [4, -13, 12], [5, -11, 10], [6, -8, 6],
+];
+const SHARK_DORSAL = [[-8, -2, 3], [-9, -1, 2], [-10, -1, 1], [-11, 0, 1]];
+const DOLPHIN_ROWS = [
+  [-5, -6, 4], [-4, -9, 7], [-3, -11, 8], [-2, -12, 9], [-1, -12, 9], [0, -12, 14], [1, -11, 13],
+  [2, -10, 7], [3, -8, 5],
+];
+const DOLPHIN_DORSAL = [[-7, -1, 1], [-6, -1, 2]];
+function drawSeaShark(sx, sy, dir, lift, jumping) {
+  seaPlace(sx, sy - Math.round(lift || 0), dir, (c2) => {
+    seaOutline(c2, SHARK_ROWS);
+    seaOutline(c2, SHARK_DORSAL);
+    seaOutline(c2, [[-3, -18, -15], [-7, -21, -18], [-6, -21, -18], [-5, -21, -18], [-4, -21, -18], [-3, -21, -18]]);
+    seaDot(c2, -18, -3, 3, 6, "#8FB3C9");
+    seaDot(c2, -21, -7, 3, 5, "#7A9DB4");
+    seaDot(c2, -21, 2, 3, 4, "#7A9DB4");
+    seaRows(c2, SHARK_ROWS, "#8FB3C9");
+    seaRows(c2, [[1, -12, 14], [2, -12, 13], [3, -11, 12], [4, -9, 10], [5, -7, 8]], "#F4ECDD");
+    seaRows(c2, SHARK_DORSAL, "#7A9DB4");
+    seaRows(c2, [[3, -1, 3], [4, 0, 3]], "#7A9DB4");
+    seaDot(c2, 8, -3, 2, 2, SEA_INK); seaDot(c2, 8, -3, 1, 1, "#FFFFFF");
+    seaDot(c2, 6, 0, 2, 1, SEA_BLUSH);
+    seaDot(c2, 9, 1, 1, 1, SEA_MOUTH); seaDot(c2, 10, 2, 3, 1, SEA_MOUTH); seaDot(c2, 13, 1, 1, 1, SEA_MOUTH);
+    if (!jumping) seaSubmerge(c2, SHARK_ROWS, [[-21, 3, 3, 3]], -22, 18, 3);
+  });
+}
+function drawSeaDolphin(sx, sy, dir, lift, jumping) {
+  seaPlace(sx, sy - Math.round(lift || 0), dir, (c2) => {
+    seaOutline(c2, DOLPHIN_ROWS);
+    seaOutline(c2, DOLPHIN_DORSAL);
+    seaOutline(c2, [[-4, -16, -13], [-3, -16, -13], [-2, -16, -13], [-1, -14, -11], [0, -14, -11]]);
+    seaDot(c2, -14, -1, 3, 2, "#9CC8E0");
+    seaDot(c2, -16, -4, 3, 3, "#7FAECB");
+    seaDot(c2, -16, 1, 3, 3, "#7FAECB");
+    seaRows(c2, DOLPHIN_ROWS, "#9CC8E0");
+    seaRows(c2, [[1, -9, 8], [2, -8, 6], [3, -6, 4]], "#EAF4F8");
+    seaRows(c2, DOLPHIN_DORSAL, "#7FAECB");
+    seaDot(c2, 0, 2, 3, 2, "#7FAECB");
+    seaDot(c2, 5, -2, 2, 2, SEA_INK); seaDot(c2, 5, -2, 1, 1, "#FFFFFF");
+    seaDot(c2, 3, 0, 2, 1, SEA_BLUSH);
+    seaDot(c2, 8, 1, 4, 1, SEA_MOUTH); seaDot(c2, 12, 0, 1, 1, SEA_MOUTH);
+    if (!jumping) seaSubmerge(c2, DOLPHIN_ROWS, [[-16, 2, 3, 2]], -14, 14, 2);
+  });
+}
+function drawSeaGull(sx, sy, dir, wing) {
+  const G = 3;
+  seaPlace(sx, sy, dir, (c2) => {
+    seaRows(c2, [[-1, -3, 3], [0, -4, 4], [1, -4, 4], [2, -3, 2]], "#FFFFFF", G);
+    seaRows(c2, [[3, -3, 2]], "#8C99A6", G);
+    seaDot(c2, 3, -2, 3, 3, "#FFFFFF", G);
+    seaDot(c2, 6, -1, 2, 1, "#F2C230", G);
+    seaDot(c2, 4, -1, 1, 1, SEA_INK, G);
+    seaDot(c2, -6, 0, 2, 1, "#9AA6B2", G);
+    if (wing === 1) seaRows(c2, [[1, -5, 2], [2, -6, 1], [3, -5, 0], [4, -4, -1]], "#9AA6B2", G);
+    else seaRows(c2, [[-4, -2, 1], [-3, -3, 2], [-2, -4, 2], [-1, -3, 1]], "#9AA6B2", G);
+  });
+}
+
+// 바닥 바로 위에 그린다 (선착장·캐릭터·낚싯대·버튼보다 항상 아래)
+let seaShark = null; // 이름표 자리 계산에 쓴다
+function drawSeaAnimals() {
+  const t = Date.now();
+  const onScreen = (wx, wy, m) => wx - cam.x > -m && wx - cam.x < canvas.width + m && wy - cam.y > -m && wy - cam.y < canvas.height + m;
+  for (const d of dolphinsAt(t)) if (onScreen(d.x, d.y, 80)) drawSeaDolphin(d.x - cam.x, d.y - cam.y, d.dir, d.lift, d.jumping);
+  seaShark = sharkAt(t);
+  if (onScreen(seaShark.x, seaShark.y, 100)) drawSeaShark(seaShark.x - cam.x, seaShark.y - cam.y, seaShark.dir, seaShark.lift, seaShark.jumping);
+  for (const g of gullsAt(t)) if (onScreen(g.x, g.y, 40)) drawSeaGull(g.x - cam.x, g.y - cam.y, g.dir, g.wing);
+}
+
 // 모래사장 꾸밈: 조개와 불가사리
 const SHELLS = [
   { c: 43, r: 8,  k: "shell" }, { c: 43, r: 12, k: "star" },
@@ -605,7 +773,8 @@ function drawBread(x, breadId, clothesHex, propId, sx, sy, S, dir = "down", fram
   if (propId && propId !== "cape") {
     const headProp = HEAD_PROPS.includes(propId);
     if (!back || headProp) { // 뒤에서는 머리 소품만 보인다
-      draw(propSprite(propId), headProp && dir === "side" ? 2 : 0, headProp ? -3 : 4);
+      if (propId === "headphone" && dir === "side") draw(propSprite("headphone_side"), 2, -1); // 옆모습 전용 헤드폰
+      else draw(propSprite(propId), headProp && dir === "side" ? 2 : 0, headProp ? -3 : 4);
     }
   }
   if (propId === "cape" && back) draw(propSprite("cape"), 0, 6); // 뒤에서는 망토가 몸을 덮는다
@@ -658,6 +827,16 @@ function propSprite(id) {
     box(3, 7, 3, 1, O); box(14, 7, 3, 1, O); box(3, 12, 3, 1, O); box(14, 12, 3, 1, O);
     box(2, 8, 1, 4, O); box(17, 8, 1, 4, O);
     box(4, 4, 1, 4, "#F75E8E"); box(15, 4, 1, 4, "#F75E8E");
+  } else if (id === "headphone_side") {
+    // 옆모습: 머리띠가 정수리에서 내려와 보이는 쪽 귀 하나만 덮는다
+    // (머리 뒤쪽 가운데 = 귀 자리, 눈을 가리지 않게 작게)
+    box(6, 2, 3, 1, "#F75E8E");                       // 정수리 머리띠
+    box(7, 3, 1, 4, "#F75E8E");                       // 귀까지 내려오는 띠
+    box(6, 7, 3, 4, "#D13A6A");                       // 귀마개 하나
+    box(6, 8, 1, 2, "#F75E8E");                       // 귀마개 하이라이트
+    box(6, 1, 3, 1, O); box(5, 2, 1, 1, O); box(9, 2, 1, 1, O);
+    box(6, 3, 1, 4, O); box(8, 3, 1, 4, O);
+    box(5, 7, 1, 4, O); box(9, 7, 1, 4, O); box(6, 11, 3, 1, O);
   } else if (id === "mic") {
     box(13, 13, 2, 4, "#8C8CA0"); box(12, 10, 4, 3, "#3B3B4A");
     px(13, 10, "#73738C"); box(12, 9, 4, 1, O); box(12, 13, 4, 1, O);
@@ -677,6 +856,24 @@ function propSprite(id) {
 const propIconCache = {};
 function propIcon(id) {
   if (propIconCache[id]) return propIconCache[id];
+  if (id === "headphone") {
+    // 헤드폰은 머리에 쓴 그림이 작아지면 점처럼 보여서, 아이콘 전용 그림을 따로 그린다
+    const cv2 = document.createElement("canvas");
+    cv2.width = 20; cv2.height = 20;
+    const h2 = cv2.getContext("2d");
+    const box = (c, r, w, h, col) => { h2.fillStyle = col; h2.fillRect(c, r, w, h); };
+    box(5, 3, 10, 2, "#F75E8E");                              // 머리띠
+    box(3, 5, 2, 4, "#F75E8E"); box(15, 5, 2, 4, "#F75E8E");  // 띠 양옆
+    box(2, 9, 4, 7, "#D13A6A"); box(14, 9, 4, 7, "#D13A6A");  // 귀마개
+    box(3, 10, 1, 4, "#F75E8E"); box(15, 10, 1, 4, "#F75E8E");
+    const O2 = OUTLINE;
+    box(5, 2, 10, 1, O2); box(4, 3, 1, 2, O2); box(15, 3, 1, 2, O2);
+    box(2, 5, 1, 4, O2); box(17, 5, 1, 4, O2);
+    box(1, 9, 1, 7, O2); box(6, 9, 1, 7, O2); box(13, 9, 1, 7, O2); box(18, 9, 1, 7, O2);
+    box(2, 8, 4, 1, O2); box(14, 8, 4, 1, O2); box(2, 16, 4, 1, O2); box(14, 16, 4, 1, O2);
+    propIconCache[id] = cv2;
+    return cv2;
+  }
   const src = propSprite(id);
   const d = src.getContext("2d").getImageData(0, 0, 20, 20).data;
   let minX = 20, minY = 20, maxX = -1, maxY = -1;
@@ -2670,7 +2867,12 @@ function itemSprite(id) {
 }
 
 // 재료 뽑기: 아직 못 모은 재료가 먼저, 꽝은 없다
+// 소금빵 재료는 아직 없으면 그곳에서 가장 먼저 나온다 (그다음부터는 무작위)
+const FIRST_PICK = { sea: "salt", tree: "wheat", ground: "butter" };
+
 function pickFrom(fromType) {
+  const first = FIRST_PICK[fromType];
+  if (first && !me.items.has(first)) return ITEMS.find((it) => it.id === first);
   const pool = ITEMS.filter((it) => it.from === fromType);
   const fresh = pool.filter((it) => !me.items.has(it.id));
   const from = fresh.length ? fresh : pool;
@@ -2958,16 +3160,29 @@ function pickAnimal(spot) {
    계량 → 반죽 → 모양 → 굽기 → 꾸미기 → 완성. 실패와 시간 제한이 없다.
    저장은 완성했을 때 한 번, 이 컴퓨터에만 (반·학생마다 따로).
    ============================================================ */
-const BAKE_INGS = [
+const BAKE_INGS = [         // 진저브레드 계량 재료
   { name: "밀가루", josa: "를" },
   { name: "설탕",   josa: "을" },
+];
+const SALT_INGS = [         // 소금빵 계량 재료
+  { name: "밀가루", josa: "를" },
+  { name: "우유",   josa: "를" },
+];
+// 소금빵에 필요한 도감 재료 (구워도 없어지지 않는다)
+const SALT_NEEDS = [
+  { id: "wheat",  name: "밀",  ga: "이", hint: "나무를 흔들어 봐요" },
+  { id: "butter", name: "버터", ga: "가", hint: "땅의 반짝이를 주워 봐요" },
+  { id: "milk",   name: "우유", ga: "가", hint: "젖소에게 가 봐요" },
+  { id: "egg",    name: "달걀", ga: "이", hint: "닭에게 가 봐요" },
+  { id: "salt",   name: "소금", ga: "이", hint: "바다에서 낚시해 봐요" },
 ];
 const BAKE_MAX_G = 100;     // 저울 끝 (10g 단위)
 
 // 할 때마다 목표가 바뀐다 (10g 단위, 20~100g). 한 재료는 넘치게 담긴 채로 시작해서 덜기로 맞춘다
-function makeBakeRecipe() {
-  const overIdx = Math.floor(Math.random() * BAKE_INGS.length);
-  return BAKE_INGS.map((ing, i) => {
+function makeBakeRecipe(ings) {
+  ings = ings || BAKE_INGS;
+  const overIdx = Math.floor(Math.random() * ings.length);
+  return ings.map((ing, i) => {
     if (i === overIdx) {
       const target = (2 + Math.floor(Math.random() * 7)) * 10; // 20~80g (넘칠 자리가 있게)
       const maxOver = Math.min(4, (BAKE_MAX_G - target) / 10);
@@ -3131,6 +3346,159 @@ function drawBakeOven(x2, w, h, rise, glow, drawCookieAt) {
   x2.beginPath(); x2.roundRect(wx, wy, ww, wh, 12); x2.stroke();
 }
 
+// 소금빵 (얼굴 없는 진짜 빵 모양, 26x26). salt: 소금 알갱이 0~3단계, baked: 노릇하게 구웠는지
+const saltBreadCache = {};
+function saltBreadSprite(salt, baked) {
+  const key = salt + "_" + (baked ? 1 : 0);
+  if (saltBreadCache[key]) return saltBreadCache[key];
+  const N = 26;
+  const cv = document.createElement("canvas");
+  cv.width = N; cv.height = N;
+  const x = cv.getContext("2d");
+  const g = Array.from({ length: N }, () => new Array(N).fill(0));
+  // 돌돌 말린 반달 모양: 가운데가 가장 높고 양 끝으로 갈수록 낮아진다
+  for (let c = 2; c < 24; c++) {
+    const t = (c - 13) / 11;                       // -1 ~ 1
+    const top = Math.round(8 + t * t * 6);         // 가운데 8, 끝 14
+    const bot = Math.round(19 - Math.abs(t) * 1);  // 바닥은 거의 평평
+    for (let r = top; r <= bot; r++) g[r][c] = 1;
+  }
+  const body = baked ? "#C98A4A" : "#E9CD96";
+  const light = baked ? "#E2A968" : "#F4DFB2";
+  const dark = baked ? "#9C6230" : "#CFAE72";
+  for (let r = 0; r < N; r++) for (let c = 0; c < N; c++) {
+    if (!g[r][c]) continue;
+    const isTop = !(g[r - 1] || [])[c];
+    x.fillStyle = isTop || r <= 10 ? light : body;
+    x.fillRect(c, r, 1, 1);
+  }
+  // 말린 결 (비스듬한 줄 4개)
+  x.fillStyle = dark;
+  for (const c0 of [6, 10, 15, 19]) {
+    for (let k = 0; k < 7; k++) {
+      const c = c0 + Math.floor(k / 2), r = 10 + k;
+      if (g[r] && g[r][c]) x.fillRect(c, r, 1, 1);
+    }
+  }
+  // 바닥 그늘
+  for (let c = 2; c < 24; c++) for (let r = N - 1; r >= 0; r--) {
+    if (g[r][c]) { x.fillStyle = dark; x.fillRect(c, r, 1, 1); break; }
+  }
+  // 소금 알갱이 (단계마다 늘어난다)
+  const grains = [[9, 9], [13, 8], [17, 9], [11, 11], [15, 10], [7, 12], [19, 12], [13, 12], [10, 10]];
+  x.fillStyle = "#FFFFFF";
+  grains.slice(0, salt * 3).forEach(([c, r]) => x.fillRect(c, r, 1, 1));
+  x.fillStyle = OUTLINE;
+  for (let r = 0; r < N; r++) for (let c = 0; c < N; c++) {
+    if (g[r][c]) continue;
+    const near = (g[r - 1] || [])[c] || (g[r + 1] || [])[c] || g[r][c - 1] || g[r][c + 1];
+    if (near) x.fillRect(c, r, 1, 1);
+  }
+  saltBreadCache[key] = cv;
+  return cv;
+}
+
+// 소금빵 반죽 그릇: 밀가루·우유·달걀이 들어가고, 누를수록 매끈한 반죽이 된다
+function drawSaltBowl(x2, w, h, knead) {
+  // 그릇은 1.35배로 크게 (아래쪽 가운데를 기준으로 키운다)
+  x2.save();
+  x2.translate(w / 2, h - 6);
+  x2.scale(1.35, 1.35);
+  x2.translate(-w / 2, -(h - 6));
+  drawSaltBowlInner(x2, w, h, knead);
+  x2.restore();
+  // 처음에는 들어가는 재료 그림과 이름을 위에 보여 준다 (움직이지 않는 그림)
+  if (knead === 0) {
+    const cx = w / 2;
+    const icons = [["wheat", "밀가루"], ["milk", "우유"], ["egg", "달걀"]];
+    icons.forEach(([id, label], i) => {
+      const ix = cx - 110 + i * 110;
+      x2.drawImage(itemSprite(id), ix - 24, 6, 48, 48);
+      x2.fillStyle = "#5B3A1E";
+      x2.font = "bold 20px 'Malgun Gothic', sans-serif";
+      x2.textAlign = "center"; x2.textBaseline = "middle";
+      x2.fillText(label, ix, 66);
+      x2.fillStyle = "#C98A6B"; // 그릇으로 들어가는 화살표
+      x2.beginPath(); x2.moveTo(ix - 8, 80); x2.lineTo(ix + 8, 80); x2.lineTo(ix, 92); x2.closePath(); x2.fill();
+    });
+  }
+}
+function drawSaltBowlInner(x2, w, h, knead) {
+  const cx = w / 2, by = h - 46;
+  // 그릇 안 내용물
+  if (knead < 2) {
+    x2.strokeStyle = OUTLINE; x2.lineWidth = 2;
+    x2.fillStyle = "#EFE6D2"; // 밀가루 더미
+    x2.beginPath(); x2.ellipse(cx - 30, by - 6, 36, 22, 0, Math.PI, 0); x2.closePath(); x2.fill(); x2.stroke();
+    x2.fillStyle = "#FFFFFF"; // 밀가루 가루 반짝임
+    x2.fillRect(cx - 44, by - 20, 3, 3); x2.fillRect(cx - 26, by - 24, 3, 3); x2.fillRect(cx - 18, by - 14, 3, 3);
+    x2.fillStyle = "#DCEFF8"; // 우유 웅덩이 (옅은 하늘빛)
+    x2.beginPath(); x2.ellipse(cx + 40, by - 8, 26, 9, 0, 0, Math.PI * 2); x2.fill(); x2.stroke();
+    x2.fillStyle = "#FFFFFF"; // 깨뜨린 달걀 흰자
+    x2.beginPath(); x2.ellipse(cx + 8, by - 14, 17, 11, 0, 0, Math.PI * 2); x2.fill(); x2.stroke();
+    x2.fillStyle = "#F6C244"; // 노른자
+    x2.beginPath(); x2.arc(cx + 8, by - 15, 7, 0, Math.PI * 2); x2.fill(); x2.stroke();
+  } else if (knead < 4) {
+    x2.fillStyle = "#E9D3A6"; // 몽글몽글 덩어리
+    for (const [dx, dy, r2] of [[-24, -6, 16], [2, -12, 18], [26, -6, 15], [-8, 2, 14], [14, 2, 13]]) {
+      x2.beginPath(); x2.arc(cx + dx, by + dy, r2, 0, Math.PI * 2); x2.fill();
+    }
+  } else {
+    x2.fillStyle = "#EBD4A4"; // 매끈한 반죽
+    x2.beginPath(); x2.ellipse(cx, by - 8, 44, 22, 0, 0, Math.PI * 2); x2.fill();
+    x2.strokeStyle = OUTLINE; x2.lineWidth = 3;
+    x2.beginPath(); x2.ellipse(cx, by - 8, 44, 22, 0, 0, Math.PI * 2); x2.stroke();
+    x2.fillStyle = "#F6E4BE";
+    x2.beginPath(); x2.ellipse(cx - 14, by - 18, 14, 6, -0.3, 0, Math.PI * 2); x2.fill();
+  }
+  // 그릇 (앞면)
+  x2.fillStyle = "#9FC7E0";
+  x2.beginPath(); x2.moveTo(cx - 80, by - 4); x2.lineTo(cx + 80, by - 4);
+  x2.quadraticCurveTo(cx + 70, by + 40, cx, by + 40); x2.quadraticCurveTo(cx - 70, by + 40, cx - 80, by - 4);
+  x2.fill();
+  x2.strokeStyle = OUTLINE; x2.lineWidth = 3; x2.stroke();
+  x2.fillStyle = "#C3E0EF"; x2.fillRect(cx - 80, by - 8, 160, 6);
+  x2.strokeRect(cx - 80, by - 8, 160, 6);
+}
+
+// 버터 넣고 돌돌 말기 (roll: 0~3)
+function drawSaltRoll(x2, w, h, roll) {
+  const cx = w / 2, cy = h / 2 + 20;
+  if (roll < 3) {
+    // 반죽은 1.5배로 크게 (가운데 기준)
+    x2.save();
+    x2.translate(cx, cy); x2.scale(1.5, 1.5); x2.translate(-cx - 10, -cy + 6);
+    drawSaltRollFlat(x2, cx, cy, roll);
+    x2.restore();
+  } else {
+    x2.drawImage(saltBreadSprite(0, false), cx - 78, cy - 90, 156, 156); // 다 말린 소금빵 반죽
+  }
+}
+function drawSaltRollFlat(x2, cx, cy, roll) {
+  {
+    // 납작한 세모 반죽: 말수록 짧아지고, 말린 부분이 굵어진다
+    const len = 150 - roll * 40;
+    x2.fillStyle = "#EBD4A4";
+    x2.beginPath(); x2.moveTo(cx - 80, cy - 34); x2.lineTo(cx - 80, cy + 34); x2.lineTo(cx - 80 + len, cy); x2.closePath(); x2.fill();
+    x2.strokeStyle = OUTLINE; x2.lineWidth = 3; x2.stroke();
+    if (roll > 0) { // 말린 부분
+      const rr = 14 + roll * 6;
+      x2.fillStyle = "#E3C48E";
+      x2.beginPath(); x2.ellipse(cx - 80, cy, rr * 0.7, 34 + roll * 2, 0, 0, Math.PI * 2); x2.fill();
+      x2.stroke();
+      x2.strokeStyle = "#B8935A"; x2.lineWidth = 2;
+      for (let k = 1; k <= roll; k++) {
+        x2.beginPath(); x2.ellipse(cx - 80, cy, rr * 0.7 - k * 5, 30 - k * 4, 0, 0, Math.PI * 2); x2.stroke();
+      }
+    }
+    if (roll === 0) { // 버터 막대
+      x2.fillStyle = "#F6D44C"; x2.fillRect(cx - 74, cy - 8, 30, 16);
+      x2.fillStyle = "#FBE88A"; x2.fillRect(cx - 74, cy - 8, 30, 4);
+      x2.strokeStyle = OUTLINE; x2.lineWidth = 2; x2.strokeRect(cx - 74, cy - 8, 30, 16);
+    }
+  }
+}
+
 // 체험 창 UI: 안내 문구 + 버튼 줄 (버튼은 크게)
 function bakeUI(msg, infoHTML, btns) {
   $("bakeMsg").textContent = msg;
@@ -3159,8 +3527,9 @@ function bakeUI(msg, infoHTML, btns) {
 
 function openBake() {
   bake = {
-    step: "start", recipe: makeBakeRecipe(), ingIdx: 0, grams: 0, needle: 0, touched: false, knead: 0,
+    step: "start", kind: "ginger", recipe: makeBakeRecipe(BAKE_INGS), ingIdx: 0, grams: 0, needle: 0, touched: false, knead: 0,
     shape: null, decor: { eyes: false, buttons: false, mouth: false }, ovenT0: 0, saved: false,
+    roll: 0, salt: 0,
   };
   $("bake").classList.remove("hidden");
   bakeRender();
@@ -3175,11 +3544,55 @@ function openBake() {
 function bakeRender() {
   if (!bake) return;
   const s = bake;
+  const startWeigh = () => { s.step = "weigh"; s.ingIdx = 0; s.grams = s.recipe[0].start; s.needle = 0; s.touched = false; bakeRender(); };
   if (s.step === "start") {
-    bakeUI("진저브레드 쿠키를 구워요!", "", [
-      { text: "시작하기", primary: true, click: () => { s.step = "weigh"; s.ingIdx = 0; s.grams = s.recipe[0].start; s.needle = 0; s.touched = false; bakeRender(); } },
-      { text: "내 진저브레드", click: () => { s.step = "shelf"; bakeRender(); } },
+    bakeUI("무슨 빵을 구울까요?", "", [
+      { text: "진저브레드 쿠키", sprite: cookieSprite("man", { eyes: true, buttons: true, mouth: true }, true),
+        click: () => { s.kind = "ginger"; s.recipe = makeBakeRecipe(BAKE_INGS); startWeigh(); } },
+      { text: "소금빵", sprite: saltBreadSprite(3, true),
+        click: () => { s.kind = "salt"; s.recipe = makeBakeRecipe(SALT_INGS); s.step = "saltCheck"; bakeRender(); } },
+      { text: "내 선반", click: () => { s.step = "shelf"; bakeRender(); } },
     ]);
+  } else if (s.step === "saltCheck") {
+    const missing = SALT_NEEDS.filter((n) => !me.items.has(n.id));
+    if (!missing.length) {
+      bakeUI("재료가 다 있어요! 소금빵을 구워 봐요.", "", [
+        { text: "굽기 시작", primary: true, click: startWeigh },
+        { text: "처음으로", click: () => { s.step = "start"; bakeRender(); } },
+      ]);
+    } else {
+      const m = missing[0];
+      bakeUI(`${m.name}${m.ga} 필요해요. ${m.hint}.`, "", [
+        { text: "마을로 가기", primary: true, click: () => $("bake").classList.add("hidden") },
+        { text: "처음으로", click: () => { s.step = "start"; bakeRender(); } },
+      ]);
+    }
+    // 재료 다섯 칸: 모은 재료는 초록 ✓, 없는 재료는 회색 그림자
+    const info = $("bakeInfo");
+    info.innerHTML = "";
+    const row = document.createElement("div");
+    row.className = "bake-needs";
+    for (const n of SALT_NEEDS) {
+      const got = me.items.has(n.id);
+      const cell = document.createElement("div");
+      cell.className = "bake-need" + (got ? " got" : "");
+      const cv2 = document.createElement("canvas");
+      cv2.width = 16; cv2.height = 16;
+      const cx2 = cv2.getContext("2d");
+      cx2.imageSmoothingEnabled = false;
+      cx2.drawImage(itemSprite(n.id), 0, 0);
+      if (!got) { // 회색 그림자
+        cx2.globalCompositeOperation = "source-atop";
+        cx2.fillStyle = "rgba(150,142,130,0.9)";
+        cx2.fillRect(0, 0, 16, 16);
+      }
+      cell.appendChild(cv2);
+      const label = document.createElement("span");
+      label.textContent = (got ? "✓ " : "") + n.name;
+      cell.appendChild(label);
+      row.appendChild(cell);
+    }
+    info.appendChild(row);
   } else if (s.step === "weigh") {
     const ing = s.recipe[s.ingIdx];
     const add = (n) => () => { s.touched = true; s.grams = Math.min(BAKE_MAX_G, s.grams + n); afterWeighChange(); };
@@ -3187,6 +3600,8 @@ function bakeRender() {
     let msg = `${ing.name}${ing.josa} ${ing.target}g 맞춰요.`;
     if (!s.touched && s.grams > ing.target) msg = `${s.grams}g이 담겨 있어요. ${ing.target}g으로 맞춰요.`;
     else if (s.grams > ing.target) msg = "조금 넘쳤어요. 덜기를 눌러요.";
+    // 소금빵: 도감의 "밀"이 계량에서는 "밀가루"가 된 이유를 한 줄로 이어 준다
+    if (s.kind === "salt" && s.ingIdx === 0 && !s.touched) msg = "밀을 곱게 갈아서 밀가루를 만들었어요. " + msg;
     bakeUI(msg,
       `<div class="bake-g">재료 ${s.ingIdx + 1} / ${s.recipe.length} · ${ing.name}<br><b>${s.grams}g</b> <span>/ ${ing.target}g</span></div>`,
       [
@@ -3198,7 +3613,9 @@ function bakeRender() {
     bakeUI("딱 맞아요!", `<div class="bake-g"><b>${s.recipe[s.ingIdx].target}g</b></div>`, []);
   } else if (s.step === "knead") {
     const dots = Array.from({ length: 5 }, (_, i) => `<span class="bake-dot${i < s.knead ? " full" : ""}"></span>`).join("");
-    bakeUI(s.knead >= 5 ? "매끈한 반죽이 됐어요!" : "꾹꾹 반죽하기를 5번 눌러요.",
+    let kneadMsg = "꾹꾹 반죽하기를 5번 눌러요.";
+    if (s.kind === "salt" && s.knead === 0) kneadMsg = "그릇에 밀가루, 우유, 달걀을 넣었어요. 꾹꾹 반죽하기를 5번 눌러요.";
+    bakeUI(s.knead >= 5 ? "매끈한 반죽이 됐어요!" : kneadMsg,
       `<div class="bake-dots">${dots}</div>`,
       s.knead >= 5 ? [] : [{
         text: "꾹꾹 반죽하기", primary: true,
@@ -3206,9 +3623,28 @@ function bakeRender() {
           s.knead++;
           playTone("gather");
           bakeRender();
-          if (s.knead >= 5) setTimeout(() => { if (bake === s) { s.step = "shape"; bakeRender(); } }, 1100);
+          const next = s.kind === "salt" ? "roll" : "shape";
+          if (s.knead >= 5) setTimeout(() => { if (bake === s) { s.step = next; bakeRender(); } }, 1100);
         },
       }]);
+  } else if (s.step === "roll") { // 소금빵: 버터 넣고 돌돌 말기
+    const dots = Array.from({ length: 3 }, (_, i) => `<span class="bake-dot${i < s.roll ? " full" : ""}"></span>`).join("");
+    bakeUI(s.roll >= 3 ? "예쁘게 말았어요!" : "반죽에 버터를 올렸어요. 돌돌 말기를 3번 눌러요.",
+      `<div class="bake-dots">${dots}</div>`,
+      s.roll >= 3 ? [] : [{
+        text: "돌돌 말기", primary: true,
+        click: () => {
+          s.roll++;
+          playTone("gather");
+          bakeRender();
+          if (s.roll >= 3) setTimeout(() => { if (bake === s) { s.step = "oven"; s.ovenT0 = performance.now(); bakeRender(); } }, 1100);
+        },
+      }]);
+  } else if (s.step === "sprinkle") { // 소금빵: 소금 뿌리기
+    const btns = [];
+    if (s.salt < 3) btns.push({ text: "솔솔 뿌리기", primary: true, click: () => { s.salt++; playTone("gather"); bakeRender(); } });
+    else btns.push({ text: "다 됐어요", primary: true, click: () => { s.step = "done"; bakeFinish(); bakeRender(); } });
+    bakeUI(s.salt >= 3 ? "소금을 골고루 뿌렸어요!" : "솔솔 뿌리기를 눌러서 소금을 뿌려요.", "", btns);
   } else if (s.step === "shape") {
     const pick = (shape) => () => { s.shape = shape; s.step = "oven"; s.ovenT0 = performance.now(); bakeRender(); };
     bakeUI("쿠키 모양을 골라요.", "", [
@@ -3226,13 +3662,13 @@ function bakeRender() {
       { text: "다 됐어요", primary: true, click: () => { s.step = "done"; bakeFinish(); bakeRender(); } },
     ]);
   } else if (s.step === "done") {
-    bakeUI("참 잘 구웠어요! 멋진 진저브레드예요.", "", [
+    bakeUI(s.kind === "salt" ? "고소한 소금빵이 완성됐어요! 정말 잘했어요." : "참 잘 구웠어요! 멋진 진저브레드예요.", "", [
       { text: "내 선반 보기", primary: true, click: () => { s.step = "shelf"; bakeRender(); } },
       { text: "한 번 더 굽기", click: () => { openBake(); } },
     ]);
   } else if (s.step === "shelf") {
     const list = loadBakes();
-    bakeUI(list.length ? `내 진저브레드예요. 모두 ${list.length}개 구웠어요!` : "아직 구운 쿠키가 없어요.", "", [
+    bakeUI(list.length ? `내 빵 선반이에요. 모두 ${list.length}개 구웠어요!` : "아직 구운 빵이 없어요.", "", [
       { text: "새로 굽기", primary: true, click: () => { openBake(); } },
       { text: "닫기", click: () => $("bake").classList.add("hidden") },
     ]);
@@ -3246,7 +3682,7 @@ function bakeRender() {
       mini.className = "bake-mini big";
       const mx = mini.getContext("2d");
       mx.imageSmoothingEnabled = false;
-      mx.drawImage(cookieSprite(it.shape, it.decor, true), 0, 0);
+      mx.drawImage(it.kind === "salt" ? saltBreadSprite(3, true) : cookieSprite(it.shape, it.decor, true), 0, 0);
       grid.appendChild(mini);
     }
     info.appendChild(grid);
@@ -3278,7 +3714,8 @@ function bakeFinish() { // 완성: 이 컴퓨터에 한 번만 저장 (반·학�
   const s = bake;
   if (s.saved) return;
   s.saved = true;
-  saveBakeEntry({ shape: s.shape, decor: { ...s.decor }, t: Date.now() });
+  if (s.kind === "salt") saveBakeEntry({ kind: "salt", t: Date.now() });
+  else saveBakeEntry({ kind: "ginger", shape: s.shape, decor: { ...s.decor }, t: Date.now() });
   spawnSparkle(canvas.width / 2, canvas.height / 2, 24);
   playTone("dex");
 }
@@ -3298,8 +3735,38 @@ function bakeTick(now) {
     x2.drawImage(cookieSprite(shape, decor, baked), w / 2 - size / 2, h / 2 - size / 2 + 8, size, size);
     x2.restore();
   };
-  if (s.step === "start") {
-    drawCookie("man", { eyes: true, buttons: true, mouth: true }, true, 150);
+  const drawSalt = (salt, baked, size) =>
+    x2.drawImage(saltBreadSprite(salt, baked), w / 2 - size / 2, h / 2 - size / 2 + 8, size, size);
+  if (s.step === "start") { // 두 가지 빵을 나란히
+    x2.drawImage(cookieSprite("man", { eyes: true, buttons: true, mouth: true }, true), w / 2 - 150, h / 2 - 60, 130, 130);
+    x2.drawImage(saltBreadSprite(3, true), w / 2 + 20, h / 2 - 60, 130, 130);
+  } else if (s.step === "saltCheck") {
+    drawSalt(3, true, 170);
+  } else if (s.step === "knead" && s.kind === "salt") {
+    drawSaltBowl(x2, w, h, s.knead);
+  } else if (s.step === "roll") {
+    drawSaltRoll(x2, w, h, s.roll);
+  } else if (s.step === "oven" && s.kind === "salt") {
+    const k = Math.min(1, (now - s.ovenT0) / BAKE_OVEN_MS);
+    const glow = REDUCED ? 0.4 : 0.25 + 0.35 * (0.5 + 0.5 * Math.sin((2 * Math.PI * now) / 1200));
+    drawBakeOven(x2, w, h, k, glow, (ox, oy, size, alpha) => {
+      x2.save(); x2.globalAlpha = alpha;
+      x2.drawImage(saltBreadSprite(0, k > 0.55), ox, oy, size, size);
+      x2.restore();
+    });
+    const timer = $("bakeTimer");
+    if (timer) timer.textContent = `${Math.max(0, Math.ceil((BAKE_OVEN_MS - (now - s.ovenT0)) / 1000))}초`;
+    if (k >= 1) { s.step = "sprinkle"; playTone("gather"); bakeRender(); }
+  } else if (s.step === "sprinkle" || (s.step === "done" && s.kind === "salt")) {
+    drawSalt(s.salt, true, 180);
+    if (s.step === "done") { // 축하 반짝이 (움직이지 않는 별)
+      x2.fillStyle = "#F6C244";
+      for (const [dx, dy] of [[-120, -60], [126, -48], [-106, 56], [114, 66], [0, -92]]) {
+        x2.save(); x2.translate(w / 2 + dx, h / 2 + dy);
+        x2.fillRect(-2, -8, 4, 16); x2.fillRect(-8, -2, 16, 4);
+        x2.restore();
+      }
+    }
   } else if (s.step === "weigh" || s.step === "weighDone") {
     const target = s.step === "weighDone" ? s.recipe[s.ingIdx].target : s.grams;
     s.needle = REDUCED ? target : s.needle + (target - s.needle) * 0.12; // 바늘이 부드럽게 따라간다
@@ -3353,7 +3820,8 @@ function bakeTick(now) {
       }
     }
   } else if (s.step === "shelf") {
-    drawCookie("man", { eyes: true, buttons: true, mouth: true }, true, 90);
+    x2.drawImage(cookieSprite("man", { eyes: true, buttons: true, mouth: true }, true), w / 2 - 110, h / 2 - 40, 90, 90);
+    x2.drawImage(saltBreadSprite(3, true), w / 2 + 20, h / 2 - 40, 90, 90);
   }
 }
 
@@ -3400,7 +3868,8 @@ function drawPhoto() {
   // 액자 안쪽 영역 (아래에는 이름 띠 공간을 남긴다)
   const ix = 24, iy = 24, iw = W - 48, ih = H - 104;
   // 내 캐릭터가 가운데(살짝 아래)에 오게 실제 게임 화면을 잘라 온다
-  const k = Math.min(1.3, canvas.width / iw, canvas.height / ih); // 창이 작으면 가능한 만큼만
+  // 줄이지 않고 1:1로 담는다 (줄이면 이름표 글자가 깨진다). 창이 사진보다 작을 때만 맞춰 키운다
+  const k = Math.min(1, canvas.width / iw, canvas.height / ih);
   const sw = iw * k, sh = ih * k;
   let sx = dispX(me) - cam.x - sw / 2;
   let sy = dispY(me) - cam.y - sh / 2 - 16;
@@ -3576,6 +4045,15 @@ function applySeparation(dt) {
     // 걷다가 밀린 자리가 막힌 곳이 되면 줄여서 빠져나온다
     for (let t = 0; t < 3 && !canStand(dispX(c), dispY(c)); t++) { c.sepX *= 0.4; c.sepY *= 0.4; }
     if (!canStand(dispX(c), dispY(c))) { c.sepX = 0; c.sepY = 0; }
+  }
+  // 낚시 방석을 같이 쓰는 사람들은 살짝 비켜 앉은 것처럼 보인다 (보이는 위치만)
+  for (const b of BENCHES) {
+    if (!b.fishing) continue;
+    const seat = b.seats[0];
+    const group = chars.filter((c) => Math.abs(c.x - seat.x) < 7 && Math.abs(c.y - seat.y) < 7);
+    if (group.length < 2) continue;
+    group.sort((a, b2) => String(a.id || a.name).localeCompare(String(b2.id || b2.name)));
+    group.forEach((c, i) => { c.sepX = (i - (group.length - 1) / 2) * 15; c.sepY = 0; });
   }
 }
 
@@ -4244,6 +4722,16 @@ function layoutAndDrawLabels(dt) {
 
   const chars = [me, ...friends, ...activeNpcs()]; // 내 이름표가 맨 먼저 자리를 잡는다 (항상 캐릭터 바로 위)
   const placed = [];
+  // 상어 "부캉이" 이름표: 등지느러미 위. 학생 이름표가 이 자리를 피해 간다
+  let sharkLbl = null;
+  if (seaShark) {
+    const sw = ctx.measureText(SHARK_NAME).width + 18;
+    const sx = seaShark.x - cam.x, sy = seaShark.y - cam.y - Math.round(seaShark.lift || 0) - 40;
+    if (sx > -sw && sx < canvas.width + sw && sy > -20 && sy < canvas.height + 20) {
+      sharkLbl = { x: sx, ly: sy, w: sw };
+      placed.push({ x: sx - sw / 2, y: sy - 12, w: sw, h: 24 });
+    }
+  }
   for (const ch of chars) {
     const prop = PROPS.find((p) => p.id === ch.prop);
     const seated = seatedInfo(ch); // 앉아 있으면 이름표 옆에 작은 컵 표시
@@ -4253,14 +4741,23 @@ function layoutAndDrawLabels(dt) {
     const bx = dispX(ch) - cam.x;
     const by = dispY(ch) - cam.y - CHAR_SIZE - 4; // 기본 위치: 머리 위
 
-    // 빈 자리 찾기 (화면 위로 잘리는 자리는 건너뛴다)
-    let tx = 0, ty = 0;
-    for (const [cx, cy] of LABEL_CANDS) {
+    // 빈 자리 찾기 (화면 위·왼쪽·오른쪽으로 잘리는 자리는 건너뛴다)
+    let tx = 0, ty = 0, found = false;
+    const fits = (cx, cy) => {
       const r = { x: bx + cx - w / 2, y: by + cy - 12, w, h: 24 };
-      if (r.y < 6) continue; // 화면 위로 잘리면 안 됨
-      if (placed.some((p) => rectsOverlap(r, p, 4))) continue;
-      tx = cx; ty = cy;
+      if (r.y < 6 || r.x < 4 || r.x + r.w > canvas.width - 4) return false; // 화면 밖으로 잘리면 안 됨
+      return !placed.some((p) => rectsOverlap(r, p, 4));
+    };
+    for (const [cx, cy] of LABEL_CANDS) {
+      if (!fits(cx, cy)) continue;
+      tx = cx; ty = cy; found = true;
       break;
+    }
+    // 후보가 다 차면 더 위·더 옆으로 찾아서, 어떤 경우에도 서로 겹치지 않게 한다
+    for (let row = 3; !found && row < 12; row++) {
+      for (const cx of [0, -74, 74, -148, 148, -222, 222]) {
+        if (fits(cx, -row * 27)) { tx = cx; ty = -row * 27; found = true; break; }
+      }
     }
     placed.push({ x: bx + tx - w / 2, y: by + ty - 12, w, h: 24 });
 
@@ -4285,6 +4782,18 @@ function layoutAndDrawLabels(dt) {
       ctx.lineTo(hx, hy);
       ctx.stroke();
     }
+  }
+  // 상어 이름표 (학생 이름표와 같은 모양, 흰 상자)
+  if (sharkLbl) {
+    ctx.fillStyle = "rgba(255,255,255,0.92)";
+    ctx.strokeStyle = OUTLINE;
+    ctx.lineWidth = 2;
+    ctx.beginPath();
+    ctx.roundRect(sharkLbl.x - sharkLbl.w / 2, sharkLbl.ly - 12, sharkLbl.w, 24, 12);
+    ctx.fill();
+    ctx.stroke();
+    ctx.fillStyle = "#5B3A1E";
+    ctx.fillText(SHARK_NAME, sharkLbl.x, sharkLbl.ly + 1);
   }
   // 2) 상자: 친구 먼저, 내 것은 맨 마지막(항상 맨 앞, 절대 가려지지 않음)
   for (let i = chars.length - 1; i >= 0; i--) {
@@ -4349,6 +4858,7 @@ function loop(now) {
 
   ctx.clearRect(0, 0, canvas.width, canvas.height);
   drawGround(now);
+  drawSeaAnimals(); // 바다 동물 (바닥 바로 위)
   drawShells();
   drawGroundSpots(now);
   drawWalkMarker(now);
