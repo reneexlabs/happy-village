@@ -107,7 +107,7 @@ function carveV(c, r1, r2) { for (let r = Math.min(r1,r2); r <= Math.max(r1,r2);
 carveH(16, 6, 42);          // 가로 큰길 (바닷가까지)
 carveV(24, 13, 28);         // 세로 큰길
 carveH(28, 14, 33);         // 아랫길 (음악 제작소 ~ 방송국)
-carveH(21, 7, 40);          // 중간 아랫길 (연구소 ~ 사진관)
+carveH(21, 7, 35);          // 중간 아랫길 (연구소 ~ 농장 왼쪽 출입구)
 // 시설 문 앞 길
 carveV(23, 12, 16);         // 마을 사무소
 carveV(9, 10, 16);          // 케이크 공방
@@ -224,26 +224,28 @@ for (let c = LONG_TABLE.c0; c < LONG_TABLE.c0 + LONG_TABLE.w; c++) blocked[LONG_
 /* ---------- 농장: 울타리 + 젖소·닭 (사진관 아래 들판) ----------
    동물 자리는 시곗바늘(Date.now())만으로 정해지는 사인 곡선이라
    모든 학생 화면에서 같은 동물이 같은 자리에 보인다. */
-const FARM = { c0: 36, r0: 17, c1: 42, r1: 20, gate: { c: 39, r: 20 } };
+// 안쪽 5칸 × 5칸. 출입구는 왼쪽 벽 (흙길이 끝나는 곳)
+const FARM = { c0: 36, r0: 17, c1: 42, r1: 23, gate: { c: 36, r: 21 } };
 const FARM_FENCE = []; // { c, r, horiz }
+const isGate = (c, r) => c === FARM.gate.c && r === FARM.gate.r; // 출입구는 막지 않는다
 for (let c = FARM.c0; c <= FARM.c1; c++) for (const r of [FARM.r0, FARM.r1]) {
-  if (c === FARM.gate.c && r === FARM.gate.r) continue; // 출입구는 막지 않는다
-  FARM_FENCE.push({ c, r, horiz: true });
+  if (!isGate(c, r)) FARM_FENCE.push({ c, r, horiz: true });
 }
 for (let r = FARM.r0 + 1; r < FARM.r1; r++) {
-  FARM_FENCE.push({ c: FARM.c0, r, horiz: false });
-  FARM_FENCE.push({ c: FARM.c1, r, horiz: false });
+  if (!isGate(FARM.c0, r)) FARM_FENCE.push({ c: FARM.c0, r, horiz: false });
+  if (!isGate(FARM.c1, r)) FARM_FENCE.push({ c: FARM.c1, r, horiz: false });
 }
 for (const f of FARM_FENCE) blocked[f.r][f.c] = true;
 
 // 동물 길: 가운데(cx,cy) + 사인 두 개의 합 (주기 ms, 느리고 작게). 울타리 안에만 머문다
 // 젖소는 농장 왼쪽 절반, 닭은 오른쪽 절반에서만 돌아다닌다 (버튼이 안 섞이게)
 const ANIMALS = [
-  { id: "cow1", kind: "cow", cx: 1524, cy: 744, x: [[18, 46000, 0.3], [6, 29000, 2.0]], y: [[13, 33000, 1.1], [5, 21000, 0.2]] },
-  { id: "cow2", kind: "cow", cx: 1548, cy: 782, x: [[16, 52000, 3.4], [6, 31000, 0.9]], y: [[10, 39000, 4.0], [4, 25000, 2.6]] },
-  { id: "hen1", kind: "hen", cx: 1632, cy: 784, x: [[14, 17000, 1.0], [5, 9000, 0.0]], y: [[10, 13000, 2.2], [4, 8000, 1.4]] },
-  { id: "hen2", kind: "hen", cx: 1646, cy: 736, x: [[12, 19000, 4.2], [5, 11000, 2.8]], y: [[9, 15000, 0.6], [4, 9000, 3.3]] },
-  { id: "hen3", kind: "hen", cx: 1654, cy: 762, x: [[10, 21000, 2.4], [4, 12000, 5.1]], y: [[11, 16000, 3.8], [4, 7000, 0.9]] },
+  // 안쪽: 가로 1480~1680px, 세로 720~920px (발 위치 기준으로 울타리에 닿지 않게)
+  { id: "cow1", kind: "cow", cx: 1540, cy: 800, x: [[18, 46000, 0.3], [6, 29000, 2.0]], y: [[30, 41000, 1.1], [8, 23000, 0.2]] },
+  { id: "cow2", kind: "cow", cx: 1548, cy: 868, x: [[16, 52000, 3.4], [6, 31000, 0.9]], y: [[30, 47000, 4.0], [10, 27000, 2.6]] },
+  { id: "hen1", kind: "hen", cx: 1632, cy: 790, x: [[16, 17000, 1.0], [6, 9000, 0.0]], y: [[24, 15000, 2.2], [8, 8000, 1.4]] },
+  { id: "hen2", kind: "hen", cx: 1640, cy: 850, x: [[14, 19000, 4.2], [5, 11000, 2.8]], y: [[24, 17000, 0.6], [8, 9000, 3.3]] },
+  { id: "hen3", kind: "hen", cx: 1625, cy: 890, x: [[12, 21000, 2.4], [5, 12000, 5.1]], y: [[14, 16000, 3.8], [6, 7000, 0.9]] },
 ];
 
 function animalPosAt(a, t) {
