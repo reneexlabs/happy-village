@@ -1354,6 +1354,7 @@ function setupSoundBtn() { // (화면 요소가 준비된 뒤 시작 부분에�
     updateSoundBtn();
     showToast(soundPref ? "소리를 켰어요." : "소리를 껐어요.");
     if (soundPref) playTone("gather");
+    else updatePartyBgm(); // 파티 음악도 바로 끈다
   });
   updateSoundBtn();
 }
@@ -5673,6 +5674,7 @@ function pbgmTeardown() {
 }
 // 매 프레임: 파티 중이고 효과음이 켜져 있고 마을이 보이면, 식탁까지 거리로 크기를 정한다
 function updatePartyBgm() {
+  if (!soundEnabled()) { if (pbgm.master) pbgmTeardown(); return; } // 소리를 끄면 파티 음악도 그 자리에서 바로 꺼진다
   let v = 0;
   if (partyOn(Date.now()) && soundEnabled() && !document.hidden && !villageEl.classList.contains("hidden")) {
     const d = tableDistPx(me.x, me.y);
