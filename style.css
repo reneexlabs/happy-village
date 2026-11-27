@@ -1014,3 +1014,25 @@ h1 .ui-ico, h2 .ui-ico { width: 26px; height: 26px; vertical-align: -3px; }
   background: #4E9A55; border: 2px solid #2F6B33; border-radius: 999px; padding: 3px 8px;
 }
 .top-undo { grid-column: span 2; flex-direction: row; font-size: 22px; }
+
+/* ---------- 가방 · 빵 도감 · 도장 ---------- */
+.dex-tabs { grid-template-columns: 1fr 1fr; }
+.dex-grid.bag-grid { grid-template-columns: repeat(4, 1fr); gap: 8px; }
+.bag-cell { padding: 8px 2px 6px; }
+.bag-cell canvas { width: 44px; height: 44px; }
+.bag-cell span { display: block; font-size: 22px; line-height: 1.2; word-break: keep-all; white-space: nowrap; letter-spacing: -1px; }
+.bag-count { display: block; font-size: 22px; font-weight: 800; color: #2F6B33; }
+.bag-cell.empty { opacity: 0.55; }
+.bag-cell.empty .bag-count { color: #8C8475; }
+.dex-stamp {
+  display: inline-block; margin-left: 10px; vertical-align: 2px;
+  font-size: 22px; font-weight: 800; color: #D9608A; letter-spacing: -1px;
+  border: 3px double #D9608A; border-radius: 999px; padding: 2px 10px;
+  transform: rotate(-8deg); background: #FFF4F7;
+}
+.bake-need { width: auto; min-width: 72px; padding: 6px 8px; white-space: nowrap; }
+.bake-used { font-size: 22px; font-weight: 700; color: #5B3A1E; margin-top: 6px; word-break: keep-all; line-height: 1.4; }
+.bake-used.new { color: #2F6B33; }
+@media (max-width: 480px) {
+  .dex-grid.bag-grid { grid-template-columns: repeat(3, 1fr); }
+}

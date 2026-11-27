@@ -140,10 +140,12 @@
   <div id="dex" class="modal hidden">
     <div class="card">
       <button class="close-x" id="closeDex">✕</button>
-      <h2 id="dexTitle"><span id="dexTitleText">재료 도감</span></h2>
+      <h2 id="dexTitle"><span id="dexTitleText">재료 도감</span><span id="dexStamp" class="dex-stamp hidden" title="세 도감을 다 채웠어요">참 잘했어요</span></h2>
       <div class="dex-tabs">
+        <button id="dexTabBag" class="dex-tab">가방</button>
         <button id="dexTabItems" class="dex-tab on">재료 도감</button>
         <button id="dexTabFish" class="dex-tab">물고기 도감</button>
+        <button id="dexTabBread" class="dex-tab">빵 도감</button>
       </div>
       <p class="bag-sub" id="dexCount">모은 재료 0 / 20</p>
       <div id="dexGrid" class="dex-grid"></div>

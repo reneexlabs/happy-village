@@ -85,6 +85,9 @@ const PROPS = [
   { id: "mic",       name: "마이크",   emoji: "🎤", unlocked: false },
   { id: "cape",      name: "별 망토",  emoji: "⭐", unlocked: false },
 ];
+// 없앤 소품: 예전에 쓰던 학생도 원래 모습으로 보인다 (시트 값은 그대로 둔다). 지금은 없음
+const REMOVED_PROPS = [];
+const keepProp = (id) => (id && !REMOVED_PROPS.includes(id) ? id : null);
 
 /* ============================================================
    지도 데이터 만들기 (빵나라 섬)
@@ -784,12 +787,13 @@ function charSprite(bread, clothes, dir, frame, blink, sit) {
    - 뒷모습(up)에서는 뒤에서 보이는 것만 그린다 (머리 소품·망토 O, 카메라·마이크 X). */
 const HEAD_PROPS = ["ribbon", "chefhat", "headphone"];
 function drawBread(x, breadId, clothesHex, propId, sx, sy, S, dir = "down", frame = 0, blink = false, sit = false) {
+  propId = keepProp(propId); // 없앤 소품은 그리지 않는다 (아직 새로고침하지 않은 친구가 보내도)
   const scale = S / 32;
   const back = dir === "up";
   // 앉으면 몸을 웅크려 조금 낮아진다 (발 위치는 그대로)
   const squash = sit ? 0.86 : 1;
   const draw = (img, dx, dy) => x.drawImage(img, sx + dx * scale, sy + (dy + 32 * (1 - squash)) * scale, S, S * squash);
-  if (propId === "cape" && !back) draw(propSprite("cape_front"), 0, 6); // 앞·옆에서는 어깨 뒤로 살짝 (다리 사이로 내려오지 않게)
+  if (propId === "cape" && !back) draw(propSprite(dir === "side" ? "cape_side" : "cape_front"), 0, 6); // 앞에서는 어깨 뒤로 살짝, 옆에서는 등 뒤로만
   draw(charSprite(breadId, clothesHex, dir, frame, blink, sit), 0, 0);
   if (propId === "scarf") draw(propSprite("scarf"), 0, 0); // 목도리는 앞·뒤 모두 목에 두른다
   else if (propId && propId !== "cape") {
@@ -814,11 +818,22 @@ function propSprite(id) {
   const px = (c, r, col) => { x.fillStyle = col; x.fillRect(c, r, 1, 1); };
   const box = (c, r, w, h, col) => { x.fillStyle = col; x.fillRect(c, r, w, h); };
 
-  if (id === "ribbon") {
-    box(6, 2, 3, 3, "#F75E8E"); box(11, 2, 3, 3, "#F75E8E");
-    box(9, 3, 2, 2, "#D13A6A");
-    px(6, 2, O); px(8, 2, O); px(11, 2, O); px(13, 2, O);
-    box(6, 5, 3, 1, O); box(11, 5, 3, 1, O);
+  if (id === "ribbon") { // 머리 오른쪽 위에 묶은 나비 리본 (고리 두 개 + 가운데 매듭 + 꼬리 두 개)
+    const g = newGrid(), col = {};
+    const put = (c, r, color) => { g[r][c] = 1; col[r + "," + c] = color; };
+    const P = "#F75E8E", D = "#D13A6A", L = "#FFA3C0";
+    // 머리 오른쪽 위에 딱 붙게 작게 (고리 2칸씩 + 가운데 매듭 + 짧은 꼬리)
+    [[10, 3], [11, 3], [13, 3], [14, 3], [10, 4], [11, 4], [13, 4], [14, 4], [10, 5], [11, 5], [13, 5], [14, 5]].forEach(([c, r]) => put(c, r, P));
+    put(12, 4, D);                 // 매듭
+    put(11, 6, D); put(13, 6, D);  // 꼬리
+    put(10, 3, L); put(13, 3, L);  // 반짝
+    for (let r = 0; r < 20; r++) for (let c = 0; c < 20; c++) if (g[r][c]) px(c, r, col[r + "," + c]);
+    x.fillStyle = O;
+    for (let r = 0; r < 20; r++) for (let c = 0; c < 20; c++) {
+      if (g[r][c]) continue;
+      const near = (g[r - 1] || [])[c] || (g[r + 1] || [])[c] || g[r][c - 1] || g[r][c + 1];
+      if (near) x.fillRect(c, r, 1, 1);
+    }
   } else if (id === "chefhat") {
     // 하얀 셰프 모자: 위가 둥글게 부푼 모양 + 아래 띠
     const g = newGrid();
@@ -839,12 +854,34 @@ function propSprite(id) {
       const near = (g[r - 1] || [])[c] || (g[r + 1] || [])[c] || g[r][c - 1] || g[r][c + 1];
       if (near) x.fillRect(c, r, 1, 1);
     }
-  } else if (id === "camera") { // 오른손에 든 작은 카메라 (손이 카메라 아래쪽을 받친다)
-    box(13, 10, 5, 4, "#5A5A6E"); box(13, 10, 5, 1, "#73738C"); // 몸통 + 윗면
-    box(14, 9, 2, 1, "#5A5A6E");                               // 셔터 단추 자리
-    box(15, 11, 2, 2, "#2E2E3C"); px(15, 11, "#9FDCC2");         // 렌즈 + 반짝
-    box(12, 10, 1, 4, O); box(18, 10, 1, 4, O); box(13, 14, 5, 1, O);
-    box(13, 9, 1, 1, O); box(16, 9, 2, 1, O); box(14, 8, 2, 1, O);
+  } else if (id === "camera" || id === "mic") { // 손에 든 소품 (테두리를 자동으로 둘러 도트 그림답게)
+    const g = newGrid(), col = {};
+    const put = (c, r, w, h, color) => {
+      for (let rr = r; rr < r + h; rr++) for (let cc = c; cc < c + w; cc++) { g[rr][cc] = 1; col[rr + "," + cc] = color; }
+    };
+    if (id === "camera") { // 두 손으로 배 앞에 든 작은 카메라 (양손이 카메라 옆을 잡는다)
+      put(7, 10, 6, 4, "#FFF4E0");            // 몸통 (크림색)
+      put(7, 10, 6, 1, "#F7A8C4");            // 윗판 (분홍)
+      put(8, 9, 2, 1, "#5A5A6E");             // 뷰파인더
+      put(11, 9, 1, 1, "#F75E8E");            // 셔터 단추
+      put(9, 11, 2, 2, "#3B3B4A");            // 렌즈
+      put(9, 11, 1, 1, "#7EC8F2");            // 렌즈 반짝
+      put(12, 11, 1, 1, "#FFE066");           // 플래시
+      put(7, 13, 6, 1, "#EAD9BE");            // 아래 그늘
+    } else { // 오른손에 쥐고 턱 가까이 든 마이크
+      put(12, 7, 3, 3, "#C9CED6");            // 동그란 머리 (은색)
+      put(12, 7, 1, 1, "#FFFFFF");            // 반짝
+      put(13, 8, 1, 1, "#8C8CA0"); put(14, 9, 1, 1, "#8C8CA0"); // 그물 무늬
+      put(12, 10, 3, 1, "#F75E8E");           // 분홍 띠
+      put(13, 11, 1, 3, "#3B3B4A");           // 손잡이
+    }
+    for (let r = 0; r < 20; r++) for (let c = 0; c < 20; c++) if (g[r][c]) px(c, r, col[r + "," + c]);
+    x.fillStyle = O;
+    for (let r = 0; r < 20; r++) for (let c = 0; c < 20; c++) {
+      if (g[r][c]) continue;
+      const near = (g[r - 1] || [])[c] || (g[r + 1] || [])[c] || g[r][c - 1] || g[r][c + 1];
+      if (near) x.fillRect(c, r, 1, 1);
+    }
   } else if (id === "headphone") {
     box(5, 1, 10, 1, "#F75E8E"); box(4, 2, 1, 2, "#F75E8E"); box(15, 2, 1, 2, "#F75E8E");
     box(3, 8, 3, 4, "#D13A6A"); box(14, 8, 3, 4, "#D13A6A");
@@ -861,15 +898,16 @@ function propSprite(id) {
     box(6, 1, 3, 1, O); box(5, 2, 1, 1, O); box(9, 2, 1, 1, O);
     box(6, 3, 1, 4, O); box(8, 3, 1, 4, O);
     box(5, 7, 1, 4, O); box(9, 7, 1, 4, O); box(6, 11, 3, 1, O);
-  } else if (id === "mic") {
-    box(13, 13, 2, 4, "#8C8CA0"); box(12, 10, 4, 3, "#3B3B4A");
-    px(13, 10, "#73738C"); box(12, 9, 4, 1, O); box(12, 13, 4, 1, O);
   } else if (isGiftProp(id)) { // 선생님 선물 소품
     drawGiftSprite(x, id);
-  } else if (id === "cape" || id === "cape_front") { // 별 망토: 뒤에서는 어깨~다리 위, 앞·옆에서는 어깨~허리 (발에 밟히지 않게)
+  } else if (id === "cape" || id === "cape_front" || id === "cape_side") { // 별 망토: 뒤에서는 어깨~다리 위, 앞에서는 어깨~허리, 옆에서는 등 뒤로 (발에 밟히지 않게)
     const g = newGrid();
-    const front = id === "cape_front";
-    for (let r = 7; r <= (front ? 10 : 12); r++) {
+    const front = id === "cape_front", side = id === "cape_side";
+    if (side) { // 옆모습: 목 뒤에서 시작해 등을 따라 뒤쪽(왼쪽)으로 살짝 퍼지며 내려온다
+      [[7, 7, 2], [8, 6, 3], [9, 6, 3], [10, 5, 4], [11, 5, 4], [12, 4, 5]].forEach(([r, c0, w]) => {
+        for (let c = c0; c < c0 + w; c++) g[r][c] = 1;
+      });
+    } else for (let r = 7; r <= (front ? 10 : 12); r++) {
       const half = front ? 4 + Math.ceil((r - 7) * 0.67) : 3 + Math.floor((r - 7) * 0.65);
       for (let c = 10 - half; c < 10 + half; c++) g[r][c] = 1;
     }
@@ -877,7 +915,7 @@ function propSprite(id) {
       if (!g[r][c]) continue;
       px(c, r, r === 7 ? "#4B3FB5" : r === (front ? 10 : 12) ? "#5546C9" : "#6C5CE7"); // 깃은 진하게, 아랫단은 살짝 그늘
     }
-    (front ? [[4, 9], [15, 9]] : [[5, 11], [14, 11], [9, 9], [11, 11]]).forEach(([c, r]) => px(c, r, "#FFE066")); // 별
+    (front ? [[4, 9], [15, 9]] : side ? [[6, 9], [5, 11]] : [[5, 11], [14, 11], [9, 9], [11, 11]]).forEach(([c, r]) => px(c, r, "#FFE066")); // 별
     x.fillStyle = O;
     for (let r = 0; r < 20; r++) for (let c = 0; c < 20; c++) {
       if (g[r][c]) continue;
@@ -975,10 +1013,10 @@ function drawGiftSprite(x, id) {
     put(15, 4, 2, 2, "#FFFFFF");                             // 방울
     put(4, 5, 12, 2, "#FFFFFF"); put(5, 5, 4, 1, "#F2EEE8"); // 털 띠
     put(8, 3, 2, 1, "#F2756E");                              // 반짝
-  } else if (id === "antlers") { // 루돌프 머리띠: 갈색 띠 + 두 갈래 뿔
-    put(5, 5, 10, 1, "#8A5A33");
-    put(6, 1, 1, 4, "#B07A45"); put(4, 2, 2, 1, "#B07A45"); put(7, 0, 1, 2, "#B07A45");
-    put(13, 1, 1, 4, "#B07A45"); put(14, 2, 2, 1, "#B07A45"); put(12, 0, 1, 2, "#B07A45");
+  } else if (id === "antlers") { // 루돌프 머리띠: 머리 꼭대기를 따라 얇게 두른 띠 + 작은 뿔 두 개
+    put(7, 3, 6, 1, "#8A5A33"); put(5, 4, 2, 1, "#8A5A33"); put(13, 4, 2, 1, "#8A5A33"); // 둥근 머리를 따라 휜 띠
+    put(7, 0, 1, 3, "#C08A52"); put(6, 1, 1, 1, "#C08A52"); put(5, 0, 1, 1, "#C08A52");   // 왼쪽 뿔 (바깥으로 한 갈래)
+    put(12, 0, 1, 3, "#C08A52"); put(13, 1, 1, 1, "#C08A52"); put(14, 0, 1, 1, "#C08A52"); // 오른쪽 뿔
   } else if (id === "scarf") { // 목도리: 빨강·초록 줄무늬, 앞으로 내려온 끝
     put(5, 11, 10, 2, "#D9443F"); for (let c = 6; c < 15; c += 3) put(c, 11, 1, 2, "#58B368");
     put(11, 13, 3, 4, "#D9443F"); put(11, 14, 3, 1, "#58B368");
@@ -1949,6 +1987,10 @@ const me = {
   items: new Set(), // 모은 재료
   fish: new Set(),  // 낚은 물고기 (재료 도감과 따로)
   gifts: new Set(), // 선생님께 받은 선물 소품 (한 번 받으면 계속)
+  bag: {},          // 가방: 지금 가진 재료 개수 (도감과 따로)
+  breads: new Set(),// 빵 도감: 처음 구운 빵
+  stamp: false,     // 세 도감을 다 채운 도장
+  shelf: [],        // 내 빵 선반 (최근 24개)
 };
 
 /* ---------- 친구(가짜 접속자) ---------- */
@@ -2024,7 +2066,7 @@ function setupEntry() {
     if (saved) {
       previewSelected.bread = saved.bread || "bun";
       previewSelected.colorIdx = saved.colorIdx ?? 0;
-      me.prop = saved.prop || null;
+      me.prop = keepProp(saved.prop);
       me.items = migrateItems(new Set(saved.items || []));
       me.fish = parseFish((saved.fish || []).join(","));
       me.gifts = parseGifts((saved.gifts || []).join(","));
@@ -2112,10 +2154,11 @@ async function idLogin(id) {
   me.name = String(res.name);
   me.bread = res.bread || "bun";
   me.colorIdx = Math.max(0, Math.min(5, Number(res.color) || 0));
-  me.prop = res.prop || null;
+  me.prop = keepProp(res.prop);
   me.items = migrateItems(new Set(String(res.items || "").split(",").filter(Boolean)));
   applyServerFish(res);
   applyServerGifts(res);
+  applyServerBagBread(res);
   previewSelected.bread = me.bread;
   previewSelected.colorIdx = me.colorIdx;
   $("nickname").value = me.name;
@@ -2125,6 +2168,7 @@ async function idLogin(id) {
   try {
     localStorage.setItem(SAVE_KEY, JSON.stringify({
       id: me.id, name: me.name, bread: me.bread, colorIdx: me.colorIdx, prop: me.prop, items: [...me.items], fish: [...me.fish], gifts: [...me.gifts],
+      bag: { ...me.bag }, breadDex: encodeBread(),
     }));
   } catch (e) { /* 무시 */ }
   // 주소에서 id를 지워 둔다 (즐겨찾기해도 깨끗하게)
@@ -2234,7 +2278,7 @@ async function enterVillage() {
       // 시트에 저장된 내 모습 그대로
       me.bread = res.bread || "bun";
       me.colorIdx = Math.max(0, Math.min(5, Number(res.color) || 0));
-      me.prop = res.prop || null;
+      me.prop = keepProp(res.prop);
       me.items = migrateItems(new Set(String(res.items || "").split(",").filter(Boolean)));
       applyServerFish(res);
       applyServerGifts(res);
@@ -2243,6 +2287,7 @@ async function enterVillage() {
     } else if (res.items) {
       migrateItems(new Set(String(res.items).split(",").filter(Boolean))).forEach((it) => me.items.add(it));
     }
+    if (entryMode !== "look") applyServerBagBread(res); // 가방·빵 도감·선반 (모습 바꾸기 때는 그대로)
     friends.length = 0;   // 가짜 친구 대신 진짜 친구들을 보여 준다
     startSync();
   }
@@ -2251,6 +2296,7 @@ async function enterVillage() {
     localStorage.setItem(SAVE_KEY, JSON.stringify({
       id: me.id, name: me.name, bread: me.bread, colorIdx: me.colorIdx, prop: me.prop,
       items: [...me.items], fish: [...me.fish], gifts: [...me.gifts],
+      bag: { ...me.bag }, breadDex: encodeBread(),
     }));
   } catch (e) { /* 무시 */ }
 
@@ -2344,7 +2390,7 @@ async function pollState() {
     fr.name = p.name || "친구";
     fr.bread = p.bread || "bun";
     fr.colorIdx = Math.max(0, Math.min(5, Number(p.color) || 0));
-    fr.prop = p.prop || null;
+    fr.prop = keepProp(p.prop);
     fr.tx = p.x; fr.ty = p.y;
     // 친구 낚시: 낚싯대·찌, 새로 낚은 것 (처음 본 기록은 띄우지 않는다. 늦게 받아도 표시가 바뀌었으면 띄운다)
     fr.rod = Number(p.rod) === 1;
@@ -3183,11 +3229,15 @@ function saveItems(addId) {
     const saved = JSON.parse(localStorage.getItem(SAVE_KEY) || "{}");
     saved.items = [...me.items];
     saved.fish = [...me.fish];
+    saved.bag = { ...me.bag };
+    saved.breadDex = encodeBread();
     localStorage.setItem(SAVE_KEY, JSON.stringify(saved));
   } catch (e) { /* 무시 */ }
   if (!ONLINE() || !me.id) return;
   // add: 방금 얻은 재료. 도감에 이미 있던 재료여도 보내서 우리 반 바구니에 +1 된다 (요청은 원래 1번 그대로)
-  const req = { action: "items", class: CLASS, id: me.id, items: [...me.items].join(","), fish: [...me.fish].join(",") };
+  // bag·breadDex: 가방 개수와 빵 도감(구운 빵·도장·선반). 빵을 완성했을 때도 이 요청(add 없이)으로 저장한다
+  const req = { action: "items", class: CLASS, id: me.id, items: [...me.items].join(","), fish: [...me.fish].join(","),
+                bag: encodeBag(), breadDex: encodeBread() };
   if (addId) req.add = addId;
   api(req).then((r) => { if (r && r.ok && r.basket !== undefined) applyBasket(r.basket); });
 }
@@ -3276,11 +3326,12 @@ function collectSprouts(items, now) {
 function collectCore(pick, isNew) {
   const before = ITEMS.filter((it) => me.items.has(it.id)).length;
   me.items.add(pick.id);
+  bagAdd(pick.id, 1); // 가방에 1개
   saveItems(pick.id);
   me.hopUntil = performance.now() + 300; // 작게 한 번 폴짝
   spawnSparkle(dispX(me) - cam.x, dispY(me) - cam.y - 30, 10);
   playTone("gather");
-  showToast(isNew ? `${josaOf(pick.name, "을", "를")} 처음 모았어요! 도감에 들어갔어요.` : `${josaOf(pick.name, "이", "가")} 또 나왔어요.`);
+  showToast(isNew ? `${josaOf(pick.name, "을", "를")} 처음 모았어요! 도감과 가방에 들어갔어요.` : `${josaOf(pick.name, "이", "가")} 또 나왔어요. 가방에 넣었어요.`);
   flyToDex(pick.id, isNew);
   if (!isNew) return;
   // 중요한 순간에만 칭찬 배너 (도감 5·10·15·20개, 소금빵 재료 다 모음)
@@ -3296,6 +3347,7 @@ function collectCore(pick, isNew) {
       showPraise("멋져요!", "이제 소금빵을 구울 수 있어요");
     }
   }
+  checkStamp(true); // 세 도감을 다 채웠으면 도장
 }
 
 /* ---------- 재료가 도감(책) 버튼으로 날아가기 ----------
@@ -3396,7 +3448,8 @@ const FISH = [
   { id: "hairtail", name: "갈치" },
   { id: "flatfish", name: "광어" },
 ];
-const FISH_CHANCE = 0.5; // 던질 때마다 물고기 반, 바다 재료 반 (아직 못 낚은 것이 먼저)
+const SALT_CHANCE = 1 / 3; // 던질 때마다 소금 1/3
+const FISH_CHANCE = 1 / 3; // 물고기 1/3 (아직 못 낚은 것이 먼저), 나머지 1/3은 다른 바다 재료
 function parseFish(text) {
   const valid = new Set(FISH.map((f) => f.id));
   return new Set(String(text || "").split(",").map((s) => s.trim()).filter((s) => valid.has(s)));
@@ -3485,15 +3538,21 @@ function fishSprite(id) {
   return cv;
 }
 
-// 낚을 것 고르기: 소금이 없으면 소금 먼저(그대로), 그다음은 물고기 반·바다 재료 반
+// 낚을 것 고르기: 소금이 없으면 소금 먼저(그대로).
+// 그다음은 소금 1/3 · 물고기 1/3 · 다른 바다 재료 1/3 (소금빵에 소금이 늘 필요해서 소금을 자주)
 function pickCatch() {
   if (FIRST_PICK.sea && !me.items.has(FIRST_PICK.sea)) return { item: pickFrom("sea") };
-  if (Math.random() < FISH_CHANCE) {
+  const roll = Math.random();
+  if (roll < SALT_CHANCE) return { item: ITEMS.find((it) => it.id === "salt") };
+  if (roll < SALT_CHANCE + FISH_CHANCE) {
     const fresh = FISH.filter((f) => !me.fish.has(f.id));
     const pool = fresh.length ? fresh : FISH;
     return { fish: pool[Math.floor(Math.random() * pool.length)] };
   }
-  return { item: pickFrom("sea") };
+  const others = ITEMS.filter((it) => it.from === "sea" && it.id !== "salt"); // 아직 못 모은 것이 먼저
+  const fresh = others.filter((it) => !me.items.has(it.id));
+  const from = fresh.length ? fresh : others;
+  return { item: from[Math.floor(Math.random() * from.length)] };
 }
 
 /* ---------- 낚아채는 모션 (약 1초, 흔들림·번쩍임 없음) ----------
@@ -3567,6 +3626,7 @@ function collectFish(f) {
   saveItems(); // 재료와 같은 요청에 물고기 목록도 함께 (바구니에는 세지 않는다)
   me.hopUntil = performance.now() + 300;
   showFishCard(f, isNew);
+  if (isNew) checkStamp(true); // 세 도감을 다 채웠으면 도장
 }
 let fishCardTimer = 0;
 function showFishCard(f, isNew) {
@@ -3603,6 +3663,167 @@ function applyServerFish(res) {
     if (saved && saved.id === res.id) local = parseFish((saved.fish || []).join(","));
   } catch (e) { /* 무시 */ }
   me.fish = new Set([...parseFish(res.fish), ...local]);
+}
+
+/* ============================================================
+   가방 · 빵 도감 · 내 빵 선반 · 도장
+   - 도감(me.items): 한 번이라도 모은 재료의 기록. 줄어들지 않는다.
+   - 가방(me.bag): 지금 가진 재료 개수 { wheat: 3, milk: 0 }. 얻을 때 +1, 소금빵·머랭 케이크를 완성하면 쓴 만큼 -1 (0 아래로 안 내려감)
+   - 빵 도감(me.breads): 처음 구운 빵 종류. 선반(me.shelf): 최근 24개. 도장(me.stamp): 세 도감을 다 채우면 한 번
+   - 저장: 시트 친구들 탭 "가방"·"빵도감" 칸 (재료 저장 요청 action:"items"에 같이 실어 보낸다) + 이 컴퓨터
+   ============================================================ */
+const BAG_MAX = 999;
+const SHELF_MAX = 24;
+const BAKED = [
+  { id: "ginger",   name: "진저브레드" },
+  { id: "salt",     name: "소금빵" },
+  { id: "meringue", name: "머랭 케이크" },
+];
+const bagCount = (id) => Math.max(0, Number(me.bag[id]) || 0);
+function bagAdd(id, n) { me.bag[id] = Math.max(0, Math.min(BAG_MAX, bagCount(id) + n)); }
+
+// 가방 글자: "wheat:3,milk:0" (0개도 남겨 둔다: "처음 시작"과 "다 써서 0개"를 헷갈리지 않게)
+function encodeBag() {
+  return ITEMS.filter((it) => me.bag[it.id] !== undefined).map((it) => it.id + ":" + bagCount(it.id)).join(",");
+}
+function parseBag(text) {
+  const o = {};
+  String(text || "").split(",").forEach((t) => {
+    const m = /^([a-z]+):(\d+)$/.exec(t.trim());
+    if (m && ITEMS.some((v) => v.id === m[1])) o[m[1]] = Math.min(BAG_MAX, Number(m[2]));
+  });
+  return o;
+}
+
+// 선반의 빵 한 개 ↔ 짧은 글자 (s / g.모양.눈단추입 / m.크림.토핑+토핑.뿌리기)
+function shelfToText(e) {
+  if (e.kind === "salt") return "s";
+  if (e.kind === "meringue") return ["m", e.cream || "-", (e.tops || []).join("+") || "-", e.drizzle || "-"].join(".");
+  const d = e.decor || {};
+  return ["g", e.shape || "man", `${d.eyes ? 1 : 0}${d.buttons ? 1 : 0}${d.mouth ? 1 : 0}`].join(".");
+}
+function shelfFromText(t) {
+  const p = String(t || "").split(".");
+  if (p[0] === "s") return { kind: "salt" };
+  if (p[0] === "m") {
+    return {
+      kind: "meringue",
+      cream: CREAMS.some((c) => c.id === p[1]) ? p[1] : null,
+      tops: p[2] && p[2] !== "-" ? p[2].split("+").filter((id) => TOPPINGS.includes(id)).slice(0, TOPPING_MAX) : [],
+      drizzle: DRIZZLES.some((d) => d.id === p[3]) ? p[3] : null,
+    };
+  }
+  if (p[0] === "g") {
+    const f = p[2] || "000";
+    return { kind: "ginger", shape: /^[a-z]+$/.test(p[1] || "") ? p[1] : "man", decor: { eyes: f[0] === "1", buttons: f[1] === "1", mouth: f[2] === "1" } };
+  }
+  return null;
+}
+// 빵도감 글자: "dex=ginger,salt;stamp=1;shelf=s,g.man.111,m.fresh.strawberry+blueberry.choco"
+function encodeBread() {
+  return `dex=${BAKED.filter((b) => me.breads.has(b.id)).map((b) => b.id).join(",")};stamp=${me.stamp ? 1 : 0};shelf=${me.shelf.slice(-SHELF_MAX).map(shelfToText).join(",")}`;
+}
+function parseBread(text) {
+  const out = { dex: new Set(), stamp: false, shelf: [] };
+  String(text || "").split(";").forEach((part) => {
+    const i = part.indexOf("=");
+    if (i < 0) return;
+    const k = part.slice(0, i), v = part.slice(i + 1);
+    if (k === "dex") v.split(",").forEach((id) => { if (BAKED.some((b) => b.id === id)) out.dex.add(id); });
+    else if (k === "stamp") out.stamp = v === "1";
+    else if (k === "shelf") out.shelf = v.split(",").map(shelfFromText).filter(Boolean).slice(-SHELF_MAX);
+  });
+  return out;
+}
+
+// 내 빵 선반 (예전에는 이 컴퓨터에만 저장했다 → 이제 시트의 "빵도감" 칸에도)
+const bakeKey = () => `happybread_bake_${CLASS}_${me.id || me.name || "guest"}`;
+function loadOldShelf() { // 예전 버전이 이 컴퓨터에 남긴 선반
+  try { const v = JSON.parse(localStorage.getItem(bakeKey()) || "[]"); return Array.isArray(v) ? v.filter((e) => e && e.kind) : []; }
+  catch (e) { return []; }
+}
+function loadBakes() { return me.shelf; }
+function saveBakeEntry(entry) {
+  me.shelf.push(entry);
+  me.shelf = me.shelf.slice(-SHELF_MAX); // 최근 24개까지
+}
+
+// 이 컴퓨터에도 함께 기억 (같은 학생이 다시 들어올 때, 새 Code.gs 배포 전에도 잃지 않게)
+function saveLocalBag() {
+  try {
+    const saved = JSON.parse(localStorage.getItem(SAVE_KEY) || "{}");
+    saved.bag = { ...me.bag };
+    saved.breadDex = encodeBread();
+    localStorage.setItem(SAVE_KEY, JSON.stringify(saved));
+  } catch (e) { /* 무시 */ }
+}
+
+// 입장할 때: 시트의 가방·빵도감 + 이 컴퓨터에 남은 같은 학생 기록을 합친다
+// - 가방: 시트에 있으면 시트 그대로. 없으면 이 컴퓨터 기록, 그것도 없으면 도감 재료를 1개씩 넣고 시작
+// - 빵 도감·도장은 합치고, 선반은 시트 → 이 컴퓨터 → 예전 선반 순서로 쓴다
+// - 시트에 없던 것이 생겼으면 재료 저장 요청으로 한 번 올려 둔다
+function applyServerBagBread(res) {
+  let saved = null;
+  try { const v = JSON.parse(localStorage.getItem(SAVE_KEY) || "null"); if (v && v.id === res.id) saved = v; } catch (e) { /* 무시 */ }
+  const serverHas = res.bag !== undefined; // 새 Code.gs + 초기설정 뒤에만 실려 온다
+  let push = false;
+  if (serverHas && String(res.bag).trim()) me.bag = parseBag(res.bag);
+  else {
+    me.bag = saved && saved.bag && typeof saved.bag === "object"
+      ? parseBag(Object.keys(saved.bag).map((k) => k + ":" + saved.bag[k]).join(","))
+      : {};
+    push = serverHas;
+  }
+  for (const id of me.items) {
+    if (me.bag[id] === undefined && ITEMS.some((v) => v.id === id)) { me.bag[id] = 1; push = serverHas; } // 도감에 있는 재료는 1개씩
+  }
+  const sv = parseBread(serverHas ? res.breadDex : "");
+  const lv = parseBread(saved && saved.breadDex);
+  const old = loadOldShelf();
+  me.shelf = sv.shelf.length ? sv.shelf : lv.shelf.length ? lv.shelf : old.slice(-SHELF_MAX);
+  me.breads = new Set([...sv.dex, ...lv.dex]);
+  for (const e of [...me.shelf, ...old]) if (BAKED.some((b) => b.id === e.kind)) me.breads.add(e.kind);
+  me.stamp = sv.stamp || lv.stamp;
+  if (serverHas && encodeBread() !== String(res.breadDex || "")) push = true;
+  saveLocalBag();
+  if (push) saveItems(); // 이 컴퓨터에만 있던 기록을 시트로 (재료 저장 요청 1번)
+  setTimeout(() => checkStamp(true), 2500); // 이미 세 도감을 다 채운 학생은 들어와서 한 번
+}
+
+// 세 도감(재료·물고기·빵)을 다 채우면 칭찬과 도장 한 번
+function dexAllDone() {
+  return ITEMS.every((it) => me.items.has(it.id)) && FISH.every((f) => me.fish.has(f.id)) && BAKED.every((b) => me.breads.has(b.id));
+}
+function checkStamp(save) {
+  if (me.stamp || !dexAllDone()) return false;
+  me.stamp = true;
+  showPraise("최고예요!", "재료·물고기·빵 도감을 다 채웠어요! 도장을 받았어요", true);
+  if (save) saveItems();
+  else saveLocalBag();
+  return true;
+}
+
+// 쓴 재료를 쉬운 말로: "밀 1개, 우유 1개"
+function useText(use) {
+  return ITEMS.filter((it) => use[it.id]).map((it) => `${it.name} ${use[it.id]}개`).join(", ");
+}
+// 머랭 케이크에 지금까지 고른 재료 (skip: 그 단계에서 바꾸는 중인 것은 빼고 센다)
+function meringueUse(s, skip) {
+  const u = {};
+  const add = (id) => { u[id] = (u[id] || 0) + 1; };
+  MERINGUE_NEEDS.forEach((n) => add(n.id));
+  const cr = CREAMS.find((c) => c.id === s.cream);
+  if (cr && skip !== "cream") cr.needs.forEach(add);
+  (s.tops || []).forEach(add);
+  const dz = DRIZZLES.find((d) => d.id === s.drizzle);
+  if (dz && skip !== "drizzle") add(dz.need);
+  return u;
+}
+const bagLeft = (s, id, skip) => bagCount(id) - (meringueUse(s, skip)[id] || 0);
+// 모자랄 때 안내: 도감에 있으면 "1개 더", 처음이면 "아직 없어요"
+function needMore(id) {
+  const nm = itemName(id);
+  return me.items.has(id) ? `${josaOf(nm, "이", "가")} 1개 더 필요해요. ${itemHint(id)}.` : `${josaOf(nm, "은", "는")} 아직 없어요. ${itemHint(id)}.`;
 }
 
 function setCooldown(key, c, r, durMin) {
@@ -3793,18 +4014,7 @@ function makeBakeRecipe(ings) {
 const BAKE_OVEN_MS = 5000;  // 오븐 5초
 let bake = null;            // { step, ingIdx, grams, needle, knead, shape, decor, ovenT0, saved }
 
-const bakeKey = () => `happybread_bake_${CLASS}_${me.id || me.name || "guest"}`;
-function loadBakes() {
-  try { const v = JSON.parse(localStorage.getItem(bakeKey()) || "[]"); return Array.isArray(v) ? v : []; }
-  catch (e) { return []; }
-}
-function saveBakeEntry(entry) {
-  try {
-    const list = loadBakes();
-    list.push(entry);
-    localStorage.setItem(bakeKey(), JSON.stringify(list.slice(-24))); // 최근 24개까지
-  } catch (e) { /* 무시 */ }
-}
+// 내 빵 선반 저장: loadBakes·saveBakeEntry (가방·빵 도감과 함께 시트 "빵도감" 칸에)
 
 // 진저브레드 쿠키 그림 (모양 3가지 × 꾸미기 × 굽기 전/후)
 const cookieCache = {};
@@ -4346,22 +4556,25 @@ function renderTiers(s) {
   }
 }
 
-// 도감 재료 확인 칸 (모은 재료는 초록 ✓, 없는 재료는 회색 그림자)
+// 재료 확인 칸: 필요한 재료와 가방에 든 개수 (1개 이상이면 초록 ✓, 0개면 회색 그림자). 예: 밀 x3 ✓
 function bakeNeedsRow(list) {
   const row = document.createElement("div");
   row.className = "bake-needs";
   for (const n of list) {
-    const got = me.items.has(n.id);
+    const have = bagCount(n.id), got = have >= 1;
     const cell = document.createElement("div");
     cell.className = "bake-need" + (got ? " got" : "");
     cell.appendChild(itemCanvas(n.id, !got));
     const label = document.createElement("span");
-    label.textContent = (got ? "✓ " : "") + n.name;
+    label.textContent = `${n.name} x${have}${got ? " ✓" : ""}`;
     cell.appendChild(label);
+    cell.setAttribute("aria-label", `${n.name} ${have}개${got ? ", 있어요" : ", 모자라요"}`);
     row.appendChild(cell);
   }
   return row;
 }
+// 굽기 전 안내: "밀 1개, 우유 1개, ...를 써요."
+const willUse = (list) => `${list.map((n) => `${n.name} 1개`).join(", ")}를 써요.`;
 function itemCanvas(id, shadow) {
   const cv = document.createElement("canvas");
   cv.width = 16; cv.height = 16;
@@ -4380,14 +4593,14 @@ function itemCanvas(id, shadow) {
 function meringueRender(s, startWeigh) {
   const back = { text: "처음으로", click: () => { s.step = "start"; bakeRender(); } };
   if (s.step === "mCheck") {
-    const missing = MERINGUE_NEEDS.filter((n) => !me.items.has(n.id));
+    const missing = MERINGUE_NEEDS.filter((n) => bagCount(n.id) < 1);
     if (!missing.length) {
-      bakeUI("재료가 다 있어요! 머랭 케이크를 만들어 봐요.", "", [
+      bakeUI(`재료가 다 있어요! ${willUse(MERINGUE_NEEDS)} 크림·토핑·뿌리기로 고른 재료도 1개씩 써요.`, "", [
         { text: "만들기 시작", primary: true, click: startWeigh }, back,
       ]);
     } else {
       const m = missing[0];
-      bakeUI(`${m.name}${m.ga} 필요해요. ${m.hint}.`, "", [
+      bakeUI(me.items.has(m.id) ? `${m.name}${m.ga} 1개 더 필요해요. ${m.hint}.` : `${m.name}${m.ga} 필요해요. ${m.hint}.`, "", [
         { text: "마을로 가기", primary: true, click: () => $("bake").classList.add("hidden") }, back,
       ]);
     }
@@ -4422,12 +4635,12 @@ function meringueRender(s, startWeigh) {
   if (s.step === "cream") {
     const cur = CREAMS.find((c) => c.id === s.cream);
     const btns = CREAMS.map((cr) => {
-      const miss = cr.needs.find((id) => !me.items.has(id));
+      const miss = cr.needs.find((id) => bagLeft(s, id, "cream") < 1); // 가방에 남은 개수로
       return {
         text: cr.name, sprite: meringueSprite(cr.id, [], { noBase: true }), on: s.cream === cr.id, off: !!miss,
         click: () => {
           if (miss) { // 아직 못 만드는 크림: 무엇이 필요한지 알려 준다
-            s.note = `${josaOf(cr.name, "을", "를")} 만들려면 ${josaOf(itemName(miss), "이", "가")} 필요해요. ${itemHint(miss)}.`;
+            s.note = `${josaOf(cr.name, "을", "를")} 만들려면 ${needMore(miss)}`;
           } else if (s.cream === cr.id) {
             s.cream = null; s.note = "";
           } else {
@@ -4457,11 +4670,11 @@ function meringueRender(s, startWeigh) {
     const grid = document.createElement("div");
     grid.className = "top-grid";
     for (const id of TOPPINGS) {
-      const got = me.items.has(id);
+      const got = bagLeft(s, id) >= 1; // 가방에 아직 남았나 (크림·뿌리기·이미 올린 토핑을 빼고)
       const many = s.tops.filter((v) => v === id).length; // 이 토핑을 몇 개 올렸나
       const tile = document.createElement("button");
-      tile.className = "top-tile" + (many ? " on" : "") + (got ? "" : " off");
-      tile.appendChild(itemCanvas(id, !got));
+      tile.className = "top-tile" + (many ? " on" : "") + (got || many ? "" : " off");
+      tile.appendChild(itemCanvas(id, !got && !many));
       const nm = document.createElement("span");
       nm.textContent = itemName(id);
       tile.appendChild(nm);
@@ -4471,9 +4684,9 @@ function meringueRender(s, startWeigh) {
         badge.textContent = "x" + many;
         tile.appendChild(badge);
       }
-      tile.setAttribute("aria-label", itemName(id) + (many ? ` ${many}개 올렸어요` : got ? "" : " 아직 없어요"));
+      tile.setAttribute("aria-label", itemName(id) + (many ? ` ${many}개 올렸어요` : "") + (got ? "" : " 가방에 없어요"));
       tile.addEventListener("click", () => {
-        if (!got) s.note = `${josaOf(itemName(id), "은", "는")} 아직 없어요. ${itemHint(id)}.`;
+        if (s.tops.length < TOPPING_MAX && !got) s.note = needMore(id);
         else if (s.tops.length >= TOPPING_MAX) s.note = "토핑은 5개까지 올릴 수 있어요. [하나 내리기]로 내려 봐요.";
         else { s.tops.push(id); s.topAt.push(performance.now()); s.note = ""; playTone("gather"); }
         bakeRender();
@@ -4496,11 +4709,11 @@ function meringueRender(s, startWeigh) {
   if (s.step === "finish") { // 마지막 뿌리기: 하나를 고르거나 안 뿌려도 된다
     const cur = DRIZZLES.find((d) => d.id === s.drizzle);
     const btns = DRIZZLES.map((d) => {
-      const got = me.items.has(d.need);
+      const got = bagLeft(s, d.need, "drizzle") >= 1;
       return {
         text: d.name, sprite: meringueSprite(s.cream, s.tops, { drizzle: d.id }), on: s.drizzle === d.id, off: !got,
         click: () => {
-          if (!got) s.note = `${josaOf(d.name, "을", "를")} 뿌리려면 ${josaOf(itemName(d.need), "이", "가")} 필요해요. ${itemHint(d.need)}.`;
+          if (!got) s.note = `${josaOf(d.name, "을", "를")} 뿌리려면 ${needMore(d.need)}`;
           else if (s.drizzle === d.id) { s.drizzle = null; s.note = ""; }
           else { s.drizzle = d.id; s.drizzleAt = performance.now(); s.note = ""; playTone("gather"); }
           bakeRender();
@@ -4641,45 +4854,21 @@ function bakeRender() {
       { text: "내 선반", click: () => { s.step = "shelf"; bakeRender(); } },
     ]);
   } else if (s.step === "saltCheck") {
-    const missing = SALT_NEEDS.filter((n) => !me.items.has(n.id));
+    const missing = SALT_NEEDS.filter((n) => bagCount(n.id) < 1);
     if (!missing.length) {
-      bakeUI("재료가 다 있어요! 소금빵을 구워 봐요.", "", [
+      bakeUI(`재료가 다 있어요! ${willUse(SALT_NEEDS)}`, "", [
         { text: "굽기 시작", primary: true, click: startWeigh },
         { text: "처음으로", click: () => { s.step = "start"; bakeRender(); } },
       ]);
     } else {
       const m = missing[0];
-      bakeUI(`${m.name}${m.ga} 필요해요. ${m.hint}.`, "", [
+      bakeUI(me.items.has(m.id) ? `${m.name}${m.ga} 1개 더 필요해요. ${m.hint}.` : `${m.name}${m.ga} 필요해요. ${m.hint}.`, "", [
         { text: "마을로 가기", primary: true, click: () => $("bake").classList.add("hidden") },
         { text: "처음으로", click: () => { s.step = "start"; bakeRender(); } },
       ]);
     }
-    // 재료 다섯 칸: 모은 재료는 초록 ✓, 없는 재료는 회색 그림자
-    const info = $("bakeInfo");
-    info.innerHTML = "";
-    const row = document.createElement("div");
-    row.className = "bake-needs";
-    for (const n of SALT_NEEDS) {
-      const got = me.items.has(n.id);
-      const cell = document.createElement("div");
-      cell.className = "bake-need" + (got ? " got" : "");
-      const cv2 = document.createElement("canvas");
-      cv2.width = 16; cv2.height = 16;
-      const cx2 = cv2.getContext("2d");
-      cx2.imageSmoothingEnabled = false;
-      cx2.drawImage(itemSprite(n.id), 0, 0);
-      if (!got) { // 회색 그림자
-        cx2.globalCompositeOperation = "source-atop";
-        cx2.fillStyle = "rgba(150,142,130,0.9)";
-        cx2.fillRect(0, 0, 16, 16);
-      }
-      cell.appendChild(cv2);
-      const label = document.createElement("span");
-      label.textContent = (got ? "✓ " : "") + n.name;
-      cell.appendChild(label);
-      row.appendChild(cell);
-    }
-    info.appendChild(row);
+    // 재료 다섯 칸: 가방에 든 개수 (1개 이상이면 초록 ✓, 0개면 회색 그림자)
+    $("bakeInfo").appendChild(bakeNeedsRow(SALT_NEEDS));
   } else if (s.step === "weigh") {
     const ing = s.recipe[s.ingIdx];
     const add = (n) => () => { s.touched = true; s.grams = Math.min(BAKE_MAX_G, s.grams + n); afterWeighChange(); };
@@ -4753,7 +4942,9 @@ function bakeRender() {
   } else if (s.step === "done") {
     bakeUI(s.kind === "salt" ? "고소한 소금빵이 완성됐어요! 정말 잘했어요."
       : s.kind === "meringue" ? "층층이 머랭 케이크가 완성됐어요! 정말 멋져요."
-      : "참 잘 구웠어요! 멋진 진저브레드예요.", "", [
+      : "참 잘 구웠어요! 멋진 진저브레드예요.",
+      (s.firstBake ? `<p class="bake-used new">빵 도감에 들어갔어요!</p>` : "")
+      + (s.usedText ? `<p class="bake-used">가방에서 ${s.usedText}를 썼어요.</p>` : ""), [
       { text: "내 선반 보기", primary: true, click: () => { s.step = "shelf"; bakeRender(); } },
       { text: "한 번 더 굽기", click: () => { openBake(); } },
     ]);
@@ -4834,13 +5025,23 @@ function shelfCanvas(sprite) {
   return cv;
 }
 
-function bakeFinish() { // 완성: 이 컴퓨터에 한 번만 저장 (반·학생마다 따로)
+function bakeFinish() { // 완성: 가방에서 재료를 한 번만 빼고, 빵 도감·선반에 넣고, 시트에 저장
   const s = bake;
   if (s.saved) return;
   s.saved = true;
+  // 쓴 재료 (진저브레드는 재료 없이). 완성한 이 순간에만 빠진다. 0 아래로는 안 내려간다
+  let use = {};
+  if (s.kind === "salt") SALT_NEEDS.forEach((n) => { use[n.id] = 1; });
+  else if (s.kind === "meringue") use = meringueUse(s);
+  for (const id in use) bagAdd(id, -use[id]);
+  s.usedText = useText(use);
+  s.firstBake = !me.breads.has(s.kind);
+  me.breads.add(s.kind);
   if (s.kind === "salt") saveBakeEntry({ kind: "salt", t: Date.now() });
   else if (s.kind === "meringue") saveBakeEntry({ kind: "meringue", cream: s.cream, tops: s.tops.slice(), drizzle: s.drizzle || null, t: Date.now() }); // 쌓은 모습 그대로
   else saveBakeEntry({ kind: "ginger", shape: s.shape, decor: { ...s.decor }, t: Date.now() });
+  checkStamp(false);
+  saveItems(); // 가방·빵 도감·선반을 시트에: 재료 저장 요청(action "items", add 없음 → 바구니는 그대로) 1번
   spawnSparkle(canvas.width / 2, canvas.height / 2, 24);
   playTone("dex");
 }
@@ -4962,11 +5163,16 @@ function openDex() {
   $("dex").classList.remove("hidden");
 }
 function renderDex() {
+  $("dexTabBag").classList.toggle("on", dexTab === "bag");
   $("dexTabItems").classList.toggle("on", dexTab === "items");
   $("dexTabFish").classList.toggle("on", dexTab === "fish");
-  $("dexTitleText").textContent = dexTab === "fish" ? "물고기 도감" : "재료 도감";
-  $("dexCount").classList.toggle("dex-count-big", dexTab === "fish"); // 물고기 도감은 22px
+  $("dexTabBread").classList.toggle("on", dexTab === "bread");
+  $("dexTitleText").textContent = { bag: "가방", fish: "물고기 도감", bread: "빵 도감" }[dexTab] || "재료 도감";
+  $("dexStamp").classList.toggle("hidden", !me.stamp); // 세 도감을 다 채우면 도장
+  $("dexCount").classList.toggle("dex-count-big", dexTab !== "items"); // 가방·물고기·빵은 22px
   if (dexTab === "fish") { renderFishDex(); return; }
+  if (dexTab === "bag") { renderBag(); return; }
+  if (dexTab === "bread") { renderBreadDex(); return; }
   $("dexGrid").className = "dex-grid";
   $("dexCount").textContent = `모은 재료 ${me.items.size} / ${ITEMS.length}`;
   const grid = $("dexGrid");
@@ -5018,6 +5224,67 @@ function renderFishDex() {
     grid.appendChild(cell);
   }
 }
+// 가방: 도감에 있는 재료와 지금 가진 개수 (0개는 흐리게)
+function renderBag() {
+  const list = ITEMS.filter((it) => me.items.has(it.id));
+  const total = list.reduce((n, it) => n + bagCount(it.id), 0);
+  $("dexCount").textContent = list.length ? `가방에 든 재료 ${total}개` : "아직 가방이 비어 있어요. 나무를 흔들어 봐요.";
+  const grid = $("dexGrid");
+  grid.className = "dex-grid bag-grid";
+  grid.innerHTML = "";
+  for (const it of list) {
+    const n = bagCount(it.id);
+    const cell = document.createElement("div");
+    cell.className = "dex-cell bag-cell" + (n ? "" : " empty");
+    const cv = document.createElement("canvas");
+    cv.width = 16; cv.height = 16;
+    const x = cv.getContext("2d");
+    x.imageSmoothingEnabled = false;
+    x.drawImage(itemSprite(it.id), 0, 0);
+    const nm = document.createElement("span");
+    nm.textContent = it.name;
+    const cnt = document.createElement("b");
+    cnt.className = "bag-count";
+    cnt.textContent = "x" + n;
+    cell.append(cv, nm, cnt);
+    cell.setAttribute("aria-label", `${it.name} ${n}개`);
+    grid.appendChild(cell);
+  }
+}
+// 빵 도감: 3칸. 아직 안 구운 빵은 그림자와 "?"
+function renderBreadDex() {
+  $("dexCount").textContent = `구운 빵 ${BAKED.filter((b) => me.breads.has(b.id)).length} / ${BAKED.length}`;
+  const grid = $("dexGrid");
+  grid.className = "dex-grid fish-grid";
+  grid.innerHTML = "";
+  const sprites = {
+    ginger: cookieSprite("man", { eyes: true, buttons: true, mouth: true }, true),
+    salt: saltBreadSprite(3, true),
+    meringue: meringueSprite("fresh", ["strawberry", "blueberry", "cherry"]),
+  };
+  for (const b of BAKED) {
+    const got = me.breads.has(b.id);
+    const sp = sprites[b.id];
+    const cell = document.createElement("div");
+    cell.className = "dex-cell fish-cell" + (got ? "" : " unknown");
+    const cv = document.createElement("canvas");
+    cv.width = sp.width; cv.height = sp.height;
+    const x = cv.getContext("2d");
+    x.imageSmoothingEnabled = false;
+    x.drawImage(sp, 0, 0);
+    if (!got) {
+      x.globalCompositeOperation = "source-atop";
+      x.fillStyle = "#B9AE9C";
+      x.fillRect(0, 0, cv.width, cv.height);
+    }
+    const nm = document.createElement("span");
+    nm.textContent = got ? b.name : "?";
+    cell.append(cv, nm);
+    grid.appendChild(cell);
+  }
+}
+$("dexTabBag").addEventListener("click", () => { dexTab = "bag"; renderDex(); });
+$("dexTabBread").addEventListener("click", () => { dexTab = "bread"; renderDex(); });
 $("dexTabItems").addEventListener("click", () => { dexTab = "items"; renderDex(); });
 $("dexTabFish").addEventListener("click", () => { dexTab = "fish"; renderDex(); });
 $("fishCard").addEventListener("click", closeFishCard);
