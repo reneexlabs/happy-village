@@ -2333,6 +2333,15 @@ async function pollState() {
     fr.colorIdx = Math.max(0, Math.min(5, Number(p.color) || 0));
     fr.prop = p.prop || null;
     fr.tx = p.x; fr.ty = p.y;
+    // 친구 낚시: 낚싯대·찌, 새로 낚은 것 (처음 본 기록은 띄우지 않는다. 늦게 받아도 표시가 바뀌었으면 띄운다)
+    fr.rod = Number(p.rod) === 1;
+    const caught = String(p.caught || "");
+    if (fr.caught === undefined) fr.caught = caught;
+    else if (caught && caught !== fr.caught) {
+      fr.caught = caught;
+      const sp = caughtSprite(caught);
+      if (sp) fr.catchShow = { sprite: sp, t0: performance.now() };
+    }
   }
   for (let i = friends.length - 1; i >= 0; i--) {
     if (friends[i].remote && !seen.has(friends[i].id)) friends.splice(i, 1);
@@ -2392,8 +2401,11 @@ function sendMyPos(force) {
     action: "move", class: CLASS, id: me.id, name: me.name,
     bread: me.bread, color: me.colorIdx, prop: me.prop || "",
     x: Math.round(me.x), y: Math.round(me.y),
+    rod: me.fishing ? 1 : 0, caught: myCaught, // 친구 화면에 낚싯대·찌, 낚은 것 그림
   });
 }
+// 마지막으로 낚은 것 "f:물고기id:표시" 또는 "i:재료id:표시". 표시가 바뀌면 친구 화면에 그림이 한 번 뜬다
+let myCaught = "";
 
 /* ============================================================
    길찾기 (BFS)
@@ -3600,7 +3612,10 @@ function seaCoolLeft() {
    - 당기기 버튼은 계속 기다려요. 늦게 눌러도 놓치지 않아요.
    - 일어나거나 걸으면 낚시가 멈춰요. */
 function fishState(now) {
-  if (!VILLAGE_CFG.gatherOpen) { me.fishing = null; return null; } // 수업 시간에는 버튼이 없다
+  if (!VILLAGE_CFG.gatherOpen) { // 수업 시간에는 버튼이 없다
+    if (me.fishing) { me.fishing = null; sendMyPos(true); } // 친구 화면의 낚싯대도 거둔다
+    return null;
+  }
   if (catchAnim) return null; // 낚아채는 중에는 버튼을 숨긴다
   if (me.fishing && me.fishing.phase === "wait") {
     if (now < me.fishing.biteAt) return null; // 찌를 보며 기다리는 중 (버튼 없음)
@@ -3649,10 +3664,13 @@ function fishAction(mode) {
     // 가짜 입질 0~1번: 던지고 1.5초 뒤부터, 진짜 입질 1.5초 전까지 사이 (동작 줄이기면 없음)
     const fakeAt = !REDUCED && Math.random() < 0.5 ? t0 + 1500 + Math.random() * Math.max(0, biteAt - t0 - 3000) : 0;
     me.fishing = { phase: "wait", biteAt, fakeAt };
+    sendMyPos(true); // 친구 화면에 낚싯대와 찌
   } else if (mode === "pull") {
     if (!me.fishing || me.fishing.phase !== "bite") return;
     me.fishing = null;
     const got = pickCatch(); // 바다 재료 또는 물고기 (꽝 없음)
+    myCaught = (got.item ? "i:" + got.item.id : "f:" + got.fish.id) + ":" + Date.now().toString(36).slice(-5);
+    sendMyPos(true); // 친구 화면: 낚싯대가 사라지고 머리 위에 낚은 것
     setCooldown("sea", b.c, b.r + 1, FISH_REST_MIN); // 자리 바로 아래 바다 칸
     startCatch(got);         // 낚싯대를 휙 채는 모션 뒤에 결과 (동작 줄이기면 바로)
   } else return;
@@ -5731,15 +5749,17 @@ function drawLongTable() {
 // 낚싯대: 손에서 앞(아래쪽 바다)으로 뻗고, 줄 끝의 찌가 물 위에서 흔들린다.
 // 물고기가 물면(bite) 찌가 크게 흔들리고 물결이 퍼진다.
 // jerk(0~1): 당기기를 눌렀을 때 뒤로 휙 젖힌 정도. -1이면 보통 낚시 중
-function drawRod(x, y, now, bite, jerk) {
+// friend: 친구 낚싯대 (가짜 입질·입질 없이 찌만 천천히. 동작 줄이기면 찌가 가만히 있다)
+function drawRod(x, y, now, bite, jerk, friend) {
   const hx = x + 10, hy = y - 10;         // 손
   const j = Math.max(0, jerk === undefined ? -1 : jerk);
   // 낚싯대 끝: 앞쪽 바다 위 → 뒤로 젖히면 머리 위 뒤쪽
   const tx = x + 36 + (-4 - 36) * j, ty = y + 12 + (-58 - 12) * j;
   // 가짜 입질: 0.35초 동안 찌가 작게 한 번 "톡" 잠겼다 올라온다 (진짜 입질처럼 계속 흔들리지 않는다)
-  const fk = !bite && me.fishing && me.fishing.fakeAt ? (now - me.fishing.fakeAt) / 350 : -1;
+  const fk = !friend && !bite && me.fishing && me.fishing.fakeAt ? (now - me.fishing.fakeAt) / 350 : -1;
   const nibble = fk >= 0 && fk < 1 ? Math.sin(Math.PI * fk) * 3 : 0;
-  const bob = bite ? Math.sin(now / 55) * 4 : Math.sin(now / 260) * 1.5 + nibble;
+  const bob = friend ? (REDUCED ? 0 : Math.sin((now + friend) / 260) * 1.5)
+    : bite ? Math.sin(now / 55) * 4 : Math.sin(now / 260) * 1.5 + nibble;
   const bx = tx + 2 + (bite ? Math.sin(now / 90) * 2 : 0), by = y + 38 + bob; // 찌 (바다 칸 위)
   // 젖힐 때는 줄에 끌려 낚싯대가 앞쪽으로 살짝 휜다
   const mx = (hx + tx) / 2 + 9 * j, my = (hy + ty) / 2 + 7 * j;
@@ -5769,6 +5789,35 @@ function drawRod(x, y, now, bite, jerk) {
   ctx.fillStyle = OUTLINE; ctx.fillRect(bx - 4, by - 5, 9, 11);      // 찌 (위 분홍, 아래 흰색)
   ctx.fillStyle = "#F77C9A"; ctx.fillRect(bx - 3, by - 4, 7, 4);
   ctx.fillStyle = "#FFFFFF"; ctx.fillRect(bx - 3, by, 7, 5);
+}
+
+// 친구가 낚은 것: "i:재료id:..." / "f:물고기id:..." → 그림 (모르는 것이면 null)
+function caughtSprite(s) {
+  const [k, id] = String(s).split(":");
+  if (k === "i" && ITEMS.some((v) => v.id === id)) return itemSprite(id);
+  if (k === "f" && FISH.some((v) => v.id === id)) return fishSprite(id);
+  return null;
+}
+// 친구 머리 위(이름표 위)에 낚은 것 그림을 2초 동안. 알림·글자·소리 없이 조용히.
+// 동작 줄이기면 떠오르거나 흐려지지 않고 그대로 있다가 사라진다
+const FRIEND_CATCH_MS = 2000;
+function drawFriendCatches(now) {
+  for (const fr of friends) {
+    if (!fr.catchShow) continue;
+    const t = now - fr.catchShow.t0;
+    if (t > FRIEND_CATCH_MS) { fr.catchShow = null; continue; }
+    const k = t / FRIEND_CATCH_MS;
+    const x = dispX(fr) - cam.x;
+    const top = fr._lbl ? fr._lbl.ly - 13 : dispY(fr) - cam.y - CHAR_SIZE - 17; // 이름표 윗변
+    const y = top - 24 - (REDUCED ? 0 : Math.min(1, k * 4) * 6);               // 처음에 살짝 떠오른다
+    ctx.save();
+    if (!REDUCED && k > 0.8) ctx.globalAlpha = (1 - k) / 0.2;                  // 마지막에 흐려진다
+    ctx.fillStyle = "#FFFFFF"; ctx.strokeStyle = OUTLINE; ctx.lineWidth = 3;
+    ctx.beginPath(); ctx.roundRect(x - 20, y - 20, 40, 40, 10); ctx.fill(); ctx.stroke();
+    ctx.imageSmoothingEnabled = false;
+    ctx.drawImage(fr.catchShow.sprite, x - 16, y - 16, 32, 32);
+    ctx.restore();
+  }
 }
 
 // 물고기가 물었을 때 머리 위 "!" (이름표 위)
@@ -6013,6 +6062,8 @@ function drawCharacter(ch, isMe, now) {
   // 낚시 자리에서 던졌으면 아래(바다 쪽)로 드리운 낚싯대와 찌
   if (isMe && (me.fishing || catchAnim) && sitting && sitting.fishing) {
     drawRod(x, y, now, !!(me.fishing && me.fishing.phase === "bite"), catchAnim ? catchJerk(now) : -1);
+  } else if (!isMe && ch.remote && ch.rod && sitting && sitting.fishing) { // 친구가 던졌으면 친구에게도
+    drawRod(x, y, now, false, -1, 1 + ch.blinkSeed);
   }
   // 이름표는 모든 캐릭터를 그린 뒤 따로 그린다 (layoutAndDrawLabels)
 }
@@ -6240,6 +6291,7 @@ function loop(now) {
   drawNpcMark(now);
   drawMissionArrow(now);
   drawBiteMark(now);
+  drawFriendCatches(now); // 친구가 낚은 것 (머리 위 그림 2초)
   drawCatchAnim(now); // 낚아채는 모션: 물보라와 날아오는 재료·물고기
   drawFloatItem();
   drawFireworks(); // 우리 반 바구니를 다 채운 순간 식탁 위 폭죽
