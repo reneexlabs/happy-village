@@ -2858,6 +2858,9 @@ function clickNpc(npc) {
 
 function openNpc(npc) {
   pendingNpc = null;
+  let seen = "";
+  try { seen = localStorage.getItem(MISSION_SEEN_KEY) || ""; } catch (e) { /* 무시 */ }
+  if (seen === todayStr()) { showHostTip(); return; } // 오늘 미션은 들었으니 도움말 한 줄
   startMissionDialog();
 }
 
@@ -5426,6 +5429,216 @@ function partyOn(nowMs) {
   return !!(basketState && basketState.done && basketState.doneAt && nowMs < basketState.doneAt + PARTY_MS);
 }
 
+/* ============================================================
+   반죽 촌장: 파티 진행자 + 말 걸면 도움말 한 줄
+   - 파티가 시작되면(바구니 다 채운 시각) 광장에서 식탁 오른쪽 끝까지 걸어가서 진행하고,
+     30분이 지나면 광장으로 돌아간다. 자리는 시계(Date.now())와 정해진 길만으로 정해져서
+     모든 학생 화면에서 같은 자리에 보인다 (통신 없음).
+   - 파티 동안 식탁 앞에서 같이 춤추고, 가끔 머리 위 말풍선으로 말한다.
+   - 매일 미션 대화를 들은 뒤 촌장을 누르면, 그때 나에게 맞는 도움말을 한 줄 말한다 (누를 때마다 바뀜)
+   ============================================================ */
+const HOST_SPEED = 0.07;   // 걷는 빠르기 (px/ms = 초당 70px)
+const HOST_HOME = { x: 21.5 * TILE, y: 13.6 * TILE };
+const HOST_SPOT = { x: (LONG_TABLE.c0 + LONG_TABLE.w + 1.3) * TILE, y: (LONG_TABLE.r0 + 0.65) * TILE }; // 식탁 오른쪽 끝 (깃발 기둥 바깥)
+let hostRoute = null; // { pts: [{x,y}], seg: [길이], len }
+function hostRouteGet() {
+  if (hostRoute) return hostRoute;
+  const tiles = findPath(Math.floor(HOST_HOME.x / TILE), Math.floor(HOST_HOME.y / TILE), Math.floor(HOST_SPOT.x / TILE), Math.floor(HOST_SPOT.y / TILE));
+  const pts = [HOST_HOME, ...tiles.slice(0, -1).map(([c, r]) => ({ x: (c + 0.5) * TILE, y: (r + 0.5) * TILE })), HOST_SPOT];
+  const seg = [];
+  let len = 0;
+  for (let i = 1; i < pts.length; i++) { const d = Math.hypot(pts[i].x - pts[i - 1].x, pts[i].y - pts[i - 1].y); seg.push(d); len += d; }
+  hostRoute = { pts, seg, len };
+  return hostRoute;
+}
+// 길을 따라 dist만큼 간 자리와 바라보는 쪽
+function hostAlong(dist) {
+  const R = hostRouteGet();
+  let d = Math.max(0, Math.min(R.len, dist));
+  for (let i = 0; i < R.seg.length; i++) {
+    if (d <= R.seg[i] || i === R.seg.length - 1) {
+      const a = R.pts[i], b = R.pts[i + 1], k = R.seg[i] ? Math.min(1, d / R.seg[i]) : 1;
+      const dx = b.x - a.x, dy = b.y - a.y;
+      const dir = Math.abs(dx) > Math.abs(dy) ? (dx > 0 ? "right" : "left") : (dy > 0 ? "down" : "up");
+      return { x: a.x + dx * k, y: a.y + dy * k, dir };
+    }
+    d -= R.seg[i];
+  }
+  return { x: HOST_SPOT.x, y: HOST_SPOT.y, dir: "left" };
+}
+// 지금 촌장이 할 일: home(광장) / go(식탁으로 가는 중) / host(식탁에서 진행) / back(돌아가는 중)
+function hostPhase(nowMs) {
+  const at = basketState && basketState.done ? basketState.doneAt : 0;
+  if (!at) return { phase: "home" };
+  const walkMs = hostRouteGet().len / HOST_SPEED;
+  const t = nowMs - at;
+  if (t < 0) return { phase: "home" };
+  if (t < walkMs) return { phase: "go", dist: t * HOST_SPEED };
+  if (t < PARTY_MS) return { phase: "host", since: t - walkMs };
+  if (t < PARTY_MS + walkMs) return { phase: "back", dist: hostRouteGet().len - (t - PARTY_MS) * HOST_SPEED };
+  return { phase: "home" };
+}
+function updateHost(nowMs) {
+  const npc = NPCS[0];
+  const st = hostPhase(nowMs);
+  npc.hosting = st.phase === "host";
+  if (st.phase === "home") { npc.x = HOST_HOME.x; npc.y = HOST_HOME.y; npc.moving = false; npc.dir = "down"; return; }
+  if (st.phase === "host") { npc.x = HOST_SPOT.x; npc.y = HOST_SPOT.y; npc.moving = false; npc.dir = "left"; return; }
+  const p = hostAlong(st.dist);
+  npc.x = p.x; npc.y = p.y; npc.moving = true;
+  npc.dir = st.phase === "back" ? ({ left: "right", right: "left", up: "down", down: "up" })[p.dir] : p.dir;
+}
+
+// 파티 진행 말 (식탁에 도착하면 6초, 그 뒤 40초마다 4초씩 차례로)
+const HOST_LINES = ["맛있게 먹어요!", "음악에 맞춰 춤춰요!", "우리 반 최고예요!", "다 같이 모여서 정말 좋아요!"];
+function hostPartyLine(nowMs) {
+  const st = hostPhase(nowMs);
+  if (st.phase !== "host") return "";
+  if (st.since < 6000) return "우리 반이 해냈어요! 다 같이 파티해요!";
+  if (PARTY_MS - (st.since + hostRouteGet().len / HOST_SPEED) < 6000) return "오늘 파티 즐거웠어요! 고마워요!";
+  const k = Math.floor((st.since - 6000) / 40000);
+  return (st.since - 6000) % 40000 < 4000 ? HOST_LINES[k % HOST_LINES.length] : "";
+}
+
+// 촌장 도움말: 지금 나에게 맞는 말 여러 개 중 하나 (누를 때마다 다음 것)
+let hostTip = null; // { text, until }
+let hostTipIdx = 0;
+function hostTips() {
+  const tips = [];
+  if (basketState && basketState.items && basketState.items.length) {
+    if (basketState.done) {
+      if (partyOn(Date.now())) tips.push("파티 중이에요! 식탁으로 가서 다 같이 놀아요.");
+    } else {
+      const t = basketTotals(basketState);
+      const need = basketState.items.find((it) => it.have < it.need);
+      if (need) tips.push(`우리 반 바구니가 ${t.have}/${t.need}이에요. ${josaOf(itemName(need.id), "이", "가")} 더 필요해요!`);
+    }
+  }
+  const saltMiss = SALT_NEEDS.filter((n) => bagCount(n.id) < 1);
+  if (!saltMiss.length) tips.push("가방에 재료가 다 있어요. 소금빵을 구워 볼래요?");
+  else if (saltMiss.length === 1) tips.push(`${josaOf(saltMiss[0].name, "이", "가")} 1개 더 있으면 소금빵을 구울 수 있어요. ${saltMiss[0].hint}.`);
+  const merMiss = MERINGUE_NEEDS.filter((n) => bagCount(n.id) < 1);
+  if (!merMiss.length) tips.push("달걀과 설탕이 있네요. 머랭 케이크를 만들어 볼래요?");
+  const notItems = ITEMS.filter((it) => !me.items.has(it.id));
+  if (notItems.length) tips.push(`아직 못 모은 재료가 ${notItems.length}개 있어요. ${itemHint(notItems[0].id)}.`);
+  else {
+    const notFish = FISH.filter((f) => !me.fish.has(f.id)).length;
+    if (notFish) tips.push(`아직 못 낚은 물고기가 ${notFish}마리 있어요. 바다에서 낚시해 봐요.`);
+  }
+  const notBaked = BAKED.find((b) => !me.breads.has(b.id));
+  if (notBaked) tips.push(`아직 ${josaOf(notBaked.name, "을", "를")} 안 구워 봤어요. 만빵 제빵소에 가 봐요.`);
+  if (me.stamp) tips.push("도감을 다 채웠군요! 정말 대단해요.");
+  if (!tips.length) tips.push("오늘도 반가워요! 마을을 둘러봐요.");
+  return tips;
+}
+function showHostTip() {
+  const tips = hostTips();
+  hostTip = { text: tips[hostTipIdx % tips.length], until: performance.now() + 5000 };
+  hostTipIdx++;
+  playTone("gather");
+}
+
+// 촌장 머리 위 말풍선 (22px, 넓으면 두 줄로). 도움말이 진행 말보다 먼저
+function wrapLines(text, maxW) {
+  const words = text.split(" ");
+  const lines = [];
+  let cur = "";
+  for (const w of words) {
+    const t = cur ? cur + " " + w : w;
+    if (cur && ctx.measureText(t).width > maxW) { lines.push(cur); cur = w; } else cur = t;
+  }
+  if (cur) lines.push(cur);
+  return lines;
+}
+function drawHostBubble(now) {
+  const npc = NPCS[0];
+  let text = "";
+  if (hostTip && now < hostTip.until) text = hostTip.text;
+  else { hostTip = null; text = hostPartyLine(Date.now()); }
+  if (!text) return;
+  const x = npc.x - cam.x;
+  if (x < -200 || x > canvas.width + 200) return;
+  const top = (npc._lbl ? npc._lbl.ly - 13 : npc.y - cam.y - CHAR_SIZE - 17) - 34; // "!" 표시 위
+  ctx.font = "bold 22px 'Malgun Gothic', sans-serif";
+  const maxW = Math.min(300, canvas.width - 40);
+  const lines = wrapLines(text, maxW);
+  const w = Math.max(...lines.map((l) => ctx.measureText(l).width)) + 28, h = lines.length * 30 + 14;
+  const bx = Math.max(10, Math.min(canvas.width - w - 10, x - w / 2)), by = top - h;
+  ctx.fillStyle = "rgba(255,255,255,0.97)"; ctx.strokeStyle = OUTLINE; ctx.lineWidth = 3;
+  ctx.beginPath(); ctx.roundRect(bx, by, w, h, 14); ctx.fill(); ctx.stroke();
+  ctx.beginPath(); ctx.moveTo(x - 7, by + h - 1); ctx.lineTo(x, by + h + 10); ctx.lineTo(x + 7, by + h - 1); ctx.closePath();
+  ctx.fillStyle = "#FFFFFF"; ctx.fill(); ctx.stroke();
+  ctx.fillStyle = "#FFFFFF"; ctx.fillRect(x - 6, by + h - 4, 12, 4); // 꼬리와 몸 사이 선 지우기
+  ctx.fillStyle = "#5B3A1E"; ctx.textAlign = "center"; ctx.textBaseline = "middle";
+  lines.forEach((l, i) => ctx.fillText(l, bx + w / 2, by + 22 + i * 30));
+}
+
+/* ---------- 파티 꾸미기: 깃발 줄·풍선·접시마다 빵, 색종이 ---------- */
+const PARTY_FLAG_COLS = ["#F7A8C4", "#FFD66B", "#9FDCC2", "#BFD7FF", "#C3A6F0"];
+function drawPartyDecor(x, y, w) {
+  // 식탁 양 끝 기둥 + 깃발 줄 (앉은 친구 머리보다 높게)
+  const lx = x - 22, rx = x + w + 14, topY = y - 104;
+  for (const px of [lx, rx]) {
+    ctx.fillStyle = "#C98A6B"; ctx.fillRect(px, topY, 8, y + 18 - topY);
+    ctx.strokeStyle = OUTLINE; ctx.lineWidth = 2; ctx.strokeRect(px, topY, 8, y + 18 - topY);
+  }
+  const ax = lx + 4, bx = rx + 4, sag = 16;
+  const at = (k) => ({ x: ax + (bx - ax) * k, y: topY + 4 + Math.sin(Math.PI * k) * sag });
+  ctx.strokeStyle = OUTLINE; ctx.lineWidth = 2;
+  ctx.beginPath();
+  for (let i = 0; i <= 20; i++) { const p = at(i / 20); if (i) ctx.lineTo(p.x, p.y); else ctx.moveTo(p.x, p.y); }
+  ctx.stroke();
+  const n = 11;
+  for (let i = 1; i < n; i++) { // 삼각 깃발
+    const p = at(i / n);
+    ctx.fillStyle = PARTY_FLAG_COLS[i % PARTY_FLAG_COLS.length];
+    ctx.beginPath(); ctx.moveTo(p.x - 9, p.y); ctx.lineTo(p.x + 9, p.y); ctx.lineTo(p.x, p.y + 16); ctx.closePath();
+    ctx.fill(); ctx.stroke();
+  }
+  // 기둥 꼭대기 풍선 묶음
+  for (const px of [lx + 4, rx + 4]) {
+    const balloons = [[-12, -26, "#F7A8C4"], [10, -30, "#9FDCC2"], [-1, -42, "#FFD66B"]];
+    for (const [dx, dy, col] of balloons) {
+      ctx.strokeStyle = "rgba(90,58,30,0.6)"; ctx.lineWidth = 1;
+      ctx.beginPath(); ctx.moveTo(px, topY); ctx.lineTo(px + dx, topY + dy + 9); ctx.stroke();
+      ctx.fillStyle = col; ctx.strokeStyle = OUTLINE; ctx.lineWidth = 2;
+      ctx.beginPath(); ctx.ellipse(px + dx, topY + dy, 8, 10, 0, 0, Math.PI * 2); ctx.fill(); ctx.stroke();
+      ctx.fillStyle = "rgba(255,255,255,0.7)"; ctx.fillRect(px + dx - 4, topY + dy - 6, 3, 3);
+    }
+  }
+}
+// 접시마다 빵 (가운데는 큰 식빵이라 비워 둔다)
+function drawPartyPlates(x, y) {
+  const kinds = ["ginger", "salt", "meringue", null, "meringue", "salt", "ginger"];
+  for (let i = 0; i < LONG_TABLE.w; i++) {
+    const k = kinds[i % kinds.length];
+    if (!k) continue;
+    const sp = k === "ginger" ? cookieSprite("man", { eyes: true, buttons: true, mouth: true }, true)
+      : k === "salt" ? saltBreadSprite(3, true) : meringueSprite("berry", ["strawberry", "blueberry"]);
+    const px = x + i * TILE + TILE / 2;
+    ctx.drawImage(sp, px - 13, y - 22, 26, 26);
+  }
+}
+// 색종이: 식탁 위로 천천히 내려온다 (시계로만 정해져 모두에게 같다). 동작 줄이기면 없음
+function drawPartyConfetti() {
+  if (REDUCED || !partyOn(Date.now())) return;
+  const x0 = (LONG_TABLE.c0 - 1) * TILE - cam.x, w = (LONG_TABLE.w + 2) * TILE;
+  const y0 = LONG_TABLE.r0 * TILE - cam.y - 150;
+  if (x0 + w < -20 || x0 > canvas.width + 20 || y0 > canvas.height || y0 + 220 < 0) return;
+  const t = Date.now();
+  for (let i = 0; i < 22; i++) {
+    const period = 5200 + (i * 373) % 2400;
+    const k = ((t + i * 911) % period) / period;            // 0 → 1 내려옴
+    const cx = x0 + ((i * 137) % w) + Math.sin(k * Math.PI * 4 + i) * 10;
+    const cy = y0 + k * 210;
+    ctx.globalAlpha = k > 0.85 ? (1 - k) / 0.15 : 0.95;     // 바닥 가까이에서 옅어진다
+    ctx.fillStyle = PARTY_FLAG_COLS[i % PARTY_FLAG_COLS.length];
+    const flip = Math.abs(Math.sin(k * Math.PI * 6 + i));   // 뒤집히는 느낌
+    ctx.fillRect(cx, cy, 6, 2 + flip * 5);
+  }
+  ctx.globalAlpha = 1;
+}
+
 const pbgm = { master: null, timer: 0, cursorWall: null, applied: 0, offTimer: 0 };
 function pbgmTick() {
   const ctx = audioCtx;
@@ -5498,6 +5711,7 @@ function basketHudRect() {
 // 다 채웠을 때: 배너 + (동작 줄이기가 아니면) 식탁 위 폭죽 3번
 function celebrateBasket() {
   showPraise("우리 반이 해냈어요!", "우리 반 바구니를 다 채웠어요"); // 소리는 배너가 소리 설정대로 한 번 낸다
+  danceAllUntil = Date.now() + DANCE_ALL_MS; // 8초 동안 다 같이 춤 (동작 줄이기면 ♪만)
   if (REDUCED) return; // 동작 줄이기: 식빵과 글자만
   const cx = (LONG_TABLE.c0 + LONG_TABLE.w / 2) * TILE, cy = LONG_TABLE.r0 * TILE - 100;
   const t0 = performance.now();
@@ -6058,6 +6272,14 @@ function drawPlantAt(c, r, kind, fruit) {
       ctx.fillStyle = "rgba(255,255,255,0.92)";
       ctx.fillRect(x - 16 + off, y - 36, 14, 4); ctx.fillRect(x + 2 + off, y - 39, 13, 4);
     }
+    if (showFruit) { // 흔들 수 있는 덤불: 빨간 딸기 알갱이 3개 (나무 열매처럼)
+      for (const [dx, dy] of [[-17, -24], [-3, -30], [10, -20]]) {
+        const fx = x + dx + ((h >> (dx & 7)) % 4) + off, fy = y + dy;
+        ctx.fillStyle = OUTLINE; ctx.fillRect(fx - 1, fy - 1, 8, 8);
+        ctx.fillStyle = "#E8453C"; ctx.fillRect(fx, fy, 6, 6);
+        ctx.fillStyle = "#FFB3A7"; ctx.fillRect(fx + 1, fy + 1, 2, 2); // 반짝
+      }
+    }
   } else if (kind === "W") { // 밀 이삭 (살랑살랑 흔들림)
     const sway = Math.sin(nowMs / 600 + c * 1.3) * 1.5 + off;
     ctx.fillStyle = "rgba(60,40,20,0.12)";
@@ -6137,6 +6359,8 @@ function drawLongTable() {
     ctx.strokeStyle = "#D9C9A8"; ctx.lineWidth = 1.5;
     ctx.beginPath(); ctx.ellipse(px, y + 1, 10, 5, 0, 0, Math.PI * 2); ctx.stroke();
   }
+  // 파티 30분 동안: 깃발 줄·풍선, 접시마다 빵
+  if (partyOn(Date.now())) { drawPartyDecor(x, y, w); drawPartyPlates(x, y); }
   // 가운데 컵 (우리 반 바구니를 다 채우면 컵 대신 큰 식빵)
   if (basketState && basketState.done) {
     ctx.drawImage(loafSprite(), x + w / 2 - 39, y - 50, 78, 66); // 3배 크기 도트
@@ -6417,10 +6641,47 @@ function seatedInfo(ch) {
   return null;
 }
 
+/* ---------- 파티 춤 ----------
+   - 바구니를 다 채운 순간: 8초 동안 나와 친구들 모두
+   - 파티 30분 동안: 식탁 가까이(음악이 크게 들리는 곳)에 있는 캐릭터만
+   - 박자는 파티 음악과 같은 벽시계(120BPM)라 모든 학생 화면에서 같이 춘다
+   - 서 있으면 박자마다 통통 + 왼쪽 2박 → 오른쪽 1박 → 앞을 보고 크게 1박, 앉아 있으면 들썩들썩
+   - 걷는 중·낚시 중에는 추지 않는다. 동작 줄이기면 움직이지 않고 머리 위에 ♪만 */
+const DANCE_BEAT_MS = 2 * PBGM_EIGHTH_MS; // 500ms = 한 박자
+const DANCE_NEAR_PX = 160;
+const DANCE_ALL_MS = 8000;
+let danceAllUntil = 0;
+function danceInfo(ch, sitting) {
+  if (ch !== me && !friends.includes(ch) && !(ch === NPCS[0] && NPCS[0].hosting)) return null; // 촌장은 파티를 진행할 때만
+  if (ch.moving && !sitting) return null;
+  if (sitting && sitting.fishing) return null;
+  const nowMs = Date.now();
+  if (nowMs >= danceAllUntil && !(partyOn(nowMs) && tableDistPx(ch.x, ch.y) <= DANCE_NEAR_PX)) return null;
+  if (REDUCED) return { lift: 0, dir: null, note: true };
+  const beat = Math.floor(nowMs / DANCE_BEAT_MS), ph = (nowMs % DANCE_BEAT_MS) / DANCE_BEAT_MS;
+  if (sitting) return { lift: Math.sin(ph * Math.PI) * 3, dir: null };
+  const k = beat % 4;
+  return { lift: Math.sin(ph * Math.PI) * (k === 3 ? 10 : 5), dir: k < 2 ? "left" : k === 2 ? "right" : "down" };
+}
+// 동작 줄이기일 때 춤 대신 머리 위 ♪ (이름표 위, 움직이지 않음)
+function drawDanceNotes() {
+  for (const ch of [me, ...friends]) {
+    if (!ch._dance || !ch._dance.note) continue;
+    const x = dispX(ch) - cam.x;
+    const top = ch._lbl ? ch._lbl.ly - 13 : dispY(ch) - cam.y - CHAR_SIZE - 17;
+    ctx.font = "bold 22px 'Malgun Gothic', sans-serif";
+    ctx.textAlign = "center"; ctx.textBaseline = "middle";
+    ctx.lineWidth = 4; ctx.strokeStyle = "#FFFFFF"; ctx.strokeText("♪", x, top - 16);
+    ctx.fillStyle = "#D9608A"; ctx.fillText("♪", x, top - 16);
+  }
+}
+
 function drawCharacter(ch, isMe, now) {
   if (ch.blinkSeed === undefined) ch.blinkSeed = Math.floor(Math.random() * 4000);
   const sitting = seatedInfo(ch);
   const moving = ch.moving && !sitting;
+  const dance = danceInfo(ch, sitting);
+  ch._dance = dance;
 
   // 걷기 들썩임 / 가만히 있을 때 숨쉬기 / 재료 얻었을 때 폴짝
   const walkBob = moving ? Math.sin(now / 110) * 1.6 : 0;
@@ -6434,7 +6695,7 @@ function drawCharacter(ch, isMe, now) {
   const x = dispX(ch) - cam.x;
   // 앉으면 엉덩이가 의자 면에 닿게 가라앉힌다 (다리가 의자 앞면에 늘어진다)
   // 앉으면 몸을 웅크려 낮게. 마카롱 위에 앉으면 마카롱 높이만큼 올려 그린다
-  const y = dispY(ch) - cam.y + walkBob + breath - hop + (sitting ? (sitting.macaron ? 13 - MACARON_LIFT : 13) : 0);
+  const y = dispY(ch) - cam.y + walkBob + breath - hop - (dance ? dance.lift : 0) + (sitting ? (sitting.macaron ? 13 - MACARON_LIFT : 13) : 0);
   const S = CHAR_SIZE;
   const clothes = ch.clothes || COLORS[ch.colorIdx].hex;
 
@@ -6447,7 +6708,7 @@ function drawCharacter(ch, isMe, now) {
   }
 
   // 방향·걸음·깜빡임
-  const dir = sitting ? (sitting.sitUp ? "up" : "down") : (ch.dir || "down");
+  const dir = sitting ? (sitting.sitUp ? "up" : "down") : (dance && dance.dir) || ch.dir || "down";
   const sDir = (dir === "left" || dir === "right") ? "side" : dir;
   const frame = moving ? 1 + (Math.floor(now / 160) % 2) : 0;
   const blink = sDir !== "up" && ((now + ch.blinkSeed) % 3700) < 140;
@@ -6520,7 +6781,7 @@ function layoutAndDrawLabels(dt) {
     const textW = ctx.measureText(ch.name).width;
     const w = textW + 18 + iconW;
     const bx = dispX(ch) - cam.x;
-    const by = dispY(ch) - cam.y - CHAR_SIZE - 4 - (seated && seated.macaron ? MACARON_LIFT - 13 : 0); // 기본 위치: 머리 위
+    const by = dispY(ch) - cam.y - CHAR_SIZE - 4 - (seated && seated.macaron ? MACARON_LIFT - 13 : 0) - (ch._dance ? ch._dance.lift : 0); // 기본 위치: 머리 위 (춤추면 함께 들썩)
 
     // 빈 자리 찾기 (화면 위·왼쪽·오른쪽으로 잘리는 자리는 건너뛴다)
     let tx = 0, ty = 0, found = false;
@@ -6637,6 +6898,7 @@ function loop(now) {
   updateGroundSpots(now);  // 땅의 반짝이는 재료 자리 관리
   updateMission();         // 사무소 캐릭터 대화와 미션 도착 확인
   updatePartyBgm();        // 바구니를 다 채운 뒤 30분: 식탁 가까이 가면 파티 음악
+  updateHost(Date.now());  // 파티 동안 반죽 촌장은 식탁에서 진행 (모두에게 같은 자리)
   updateGiftOffer(now);    // 선생님 선물 카드 (공지·미션 대화가 끝난 뒤에)
 
   ctx.clearRect(0, 0, canvas.width, canvas.height);
@@ -6688,12 +6950,15 @@ function loop(now) {
 
   // 사무소 캐릭터 "!", 미션 화살표, 물고기 입질 "!", 떠오르는 재료, 반짝이 효과, 생크림 구름
   drawNpcMark(now);
+  drawHostBubble(now);      // 반죽 촌장 말풍선 (도움말 · 파티 진행 말)
   drawMissionArrow(now);
   drawBiteMark(now);
   drawFriendCatches(now); // 친구가 낚은 것 (머리 위 그림 2초)
+  drawDanceNotes();       // 동작 줄이기일 때 춤 대신 ♪
   drawCatchAnim(now); // 낚아채는 모션: 물보라와 날아오는 재료·물고기
   drawFloatItem();
   drawFireworks(); // 우리 반 바구니를 다 채운 순간 식탁 위 폭죽
+  drawPartyConfetti(); // 파티 동안 식탁 위로 천천히 내려오는 색종이
   updateDrawParticles(dt);
   drawSkyClouds(now);
   drawSnowfall(dt); // 크리스마스면 눈이 천천히 내린다
