@@ -1016,6 +1016,16 @@ function uiIcon(name) {
     box(10, 5, 2, 2, "#E8453C"); box(13, 5, 2, 2, "#E8453C");
     box(11, 7, 3, 2, "#E8453C");
     box(10, 9, 2, 2, "#E8453C"); box(13, 9, 2, 2, "#E8453C");
+  } else if (name === "basket") { // 우리 반 바구니 (손잡이 달린 짚 바구니)
+    box(4, 2, 8, 1, O); box(3, 3, 1, 4, O); box(12, 3, 1, 4, O); // 손잡이
+    box(4, 3, 1, 4, "#C98A4B"); box(11, 3, 1, 4, "#C98A4B");
+    box(1, 7, 14, 1, O);
+    box(2, 8, 12, 5, "#D9A060");
+    box(2, 8, 12, 1, "#E8C07A");
+    box(4, 9, 1, 4, "#B07A3E"); box(7, 9, 1, 4, "#B07A3E"); box(10, 9, 1, 4, "#B07A3E"); // 짚 무늬
+    box(2, 11, 12, 1, "#B07A3E");
+    box(1, 8, 1, 5, O); box(14, 8, 1, 5, O); box(2, 13, 12, 1, O);
+    box(5, 5, 3, 2, "#E8453C"); box(8, 6, 3, 1, "#F6D44C"); // 안에 든 재료
   } else if (name === "sprout") { // 쉬는 중 새싹
     box(7, 8, 2, 5, "#58B368");
     box(3, 6, 4, 3, "#7CC576"); box(9, 6, 4, 3, "#7CC576");
@@ -1781,6 +1791,7 @@ const me = {
   x: 24.5 * TILE, y: 17.5 * TILE,
   path: [], moving: false,
   items: new Set(), // 모은 재료
+  fish: new Set(),  // 낚은 물고기 (재료 도감과 따로)
 };
 
 /* ---------- 친구(가짜 접속자) ---------- */
@@ -1858,6 +1869,7 @@ function setupEntry() {
       previewSelected.colorIdx = saved.colorIdx ?? 0;
       me.prop = saved.prop || null;
       me.items = migrateItems(new Set(saved.items || []));
+      me.fish = parseFish((saved.fish || []).join(","));
     }
   } catch (e) { /* 무시 */ }
 
@@ -1944,6 +1956,7 @@ async function idLogin(id) {
   me.colorIdx = Math.max(0, Math.min(5, Number(res.color) || 0));
   me.prop = res.prop || null;
   me.items = migrateItems(new Set(String(res.items || "").split(",").filter(Boolean)));
+  applyServerFish(res);
   previewSelected.bread = me.bread;
   previewSelected.colorIdx = me.colorIdx;
   $("nickname").value = me.name;
@@ -1952,7 +1965,7 @@ async function idLogin(id) {
   me.y = sp.y;
   try {
     localStorage.setItem(SAVE_KEY, JSON.stringify({
-      id: me.id, name: me.name, bread: me.bread, colorIdx: me.colorIdx, prop: me.prop, items: [...me.items],
+      id: me.id, name: me.name, bread: me.bread, colorIdx: me.colorIdx, prop: me.prop, items: [...me.items], fish: [...me.fish],
     }));
   } catch (e) { /* 무시 */ }
   // 주소에서 id를 지워 둔다 (즐겨찾기해도 깨끗하게)
@@ -2064,6 +2077,7 @@ async function enterVillage() {
       me.colorIdx = Math.max(0, Math.min(5, Number(res.color) || 0));
       me.prop = res.prop || null;
       me.items = migrateItems(new Set(String(res.items || "").split(",").filter(Boolean)));
+      applyServerFish(res);
       previewSelected.bread = me.bread;
       previewSelected.colorIdx = me.colorIdx;
     } else if (res.items) {
@@ -2076,7 +2090,7 @@ async function enterVillage() {
   try {
     localStorage.setItem(SAVE_KEY, JSON.stringify({
       id: me.id, name: me.name, bread: me.bread, colorIdx: me.colorIdx, prop: me.prop,
-      items: [...me.items],
+      items: [...me.items], fish: [...me.fish],
     }));
   } catch (e) { /* 무시 */ }
 
@@ -2196,6 +2210,8 @@ async function pollState() {
     applyChristmas(v.christmas === true); // 시트의 "크리스마스" O/X
   }
   birthdays = st.birthdays || [];
+  // 우리 반 바구니 (옛 서버라 basket이 아예 없으면 숨김)
+  applyBasket(st.basket === undefined ? null : st.basket);
 
   // 3) 시설: 이름, 할 일, 링크, 열림을 시트 내용으로 바꾼다
   for (const sf of st.facilities || []) {
@@ -2663,7 +2679,13 @@ function renderDialog() {
 function advanceDialog() {
   if (dialog && dialog.idx < dialog.lines.length - 1) { dialog.idx++; renderDialog(); }
 }
-$("dialogBox").addEventListener("click", (e) => { if (e.target.id !== "dialogGo") advanceDialog(); });
+$("dialogBox").addEventListener("click", (e) => { if (e.target.id !== "dialogGo" && e.target.id !== "dialogClose") advanceDialog(); });
+// ✕를 누르면 대화창이 바로 닫힌다 (사무소 캐릭터를 다시 누르면 또 이야기할 수 있다)
+$("dialogClose").addEventListener("click", (e) => {
+  e.stopPropagation();
+  $("dialog").classList.add("hidden");
+  dialog = null;
+});
 $("dialogGo").addEventListener("click", () => {
   $("dialog").classList.add("hidden");
   dialog = null;
@@ -2938,13 +2960,18 @@ const shakeUntil = {};   // 나무 흔들림 효과
 let gatherSpot = null;
 let floatItem = null;    // 방금 얻은 재료가 떠오르는 효과
 
-function saveItems() {
+function saveItems(addId) {
   try {
     const saved = JSON.parse(localStorage.getItem(SAVE_KEY) || "{}");
     saved.items = [...me.items];
+    saved.fish = [...me.fish];
     localStorage.setItem(SAVE_KEY, JSON.stringify(saved));
   } catch (e) { /* 무시 */ }
-  if (ONLINE() && me.id) api({ action: "items", class: CLASS, id: me.id, items: [...me.items].join(",") });
+  if (!ONLINE() || !me.id) return;
+  // add: 방금 얻은 재료. 도감에 이미 있던 재료여도 보내서 우리 반 바구니에 +1 된다 (요청은 원래 1번 그대로)
+  const req = { action: "items", class: CLASS, id: me.id, items: [...me.items].join(","), fish: [...me.fish].join(",") };
+  if (addId) req.add = addId;
+  api(req).then((r) => { if (r && r.ok && r.basket !== undefined) applyBasket(r.basket); });
 }
 
 function findGatherSpot() {
@@ -3031,7 +3058,7 @@ function collectSprouts(items, now) {
 function collectCore(pick, isNew) {
   const before = ITEMS.filter((it) => me.items.has(it.id)).length;
   me.items.add(pick.id);
-  saveItems();
+  saveItems(pick.id);
   me.hopUntil = performance.now() + 300; // 작게 한 번 폴짝
   spawnSparkle(dispX(me) - cam.x, dispY(me) - cam.y - 30, 10);
   playTone("gather");
@@ -3078,7 +3105,6 @@ function flyToDex(itemId, isNew) {
     void btn.offsetWidth; // 다시 통 튀게 애니메이션을 처음부터
     btn.classList.add(REDUCED ? "dex-glow" : "dex-bump");
     setTimeout(() => btn.classList.remove("dex-bump", "dex-glow"), 400);
-    if (isNew) btn.classList.add("has-new"); // 새로 들어온 재료가 있어요 (도감을 열면 사라진다)
   };
   if (REDUCED) {
     el.style.left = (tx - 64) + "px"; el.style.top = (ty - 22) + "px";
@@ -3137,6 +3163,230 @@ function closePraise() {
 }
 $("praise").addEventListener("click", closePraise);
 
+
+/* ============================================================
+   물고기 — 낚시로 바다 재료 대신 물고기도 낚여요 (6가지, 꽝 없음)
+   - 물고기는 재료 도감(20개)과 따로, 물고기 도감에 모여요.
+   - 우리 반 바구니와 제빵소 재료에는 쓰지 않아요. 크기·희귀도·점수는 없어요.
+   - 저장: 이 컴퓨터 + 시트 "물고기" 칸 (재료 저장 요청에 함께 실어 보낸다)
+   ============================================================ */
+const FISH = [
+  { id: "bungeo",   name: "붕어빵 물고기" },
+  { id: "mackerel", name: "고등어" },
+  { id: "seabream", name: "도미" },
+  { id: "puffer",   name: "복어" },
+  { id: "hairtail", name: "갈치" },
+  { id: "flatfish", name: "광어" },
+];
+const FISH_CHANCE = 0.5; // 던질 때마다 물고기 반, 바다 재료 반 (아직 못 낚은 것이 먼저)
+function parseFish(text) {
+  const valid = new Set(FISH.map((f) => f.id));
+  return new Set(String(text || "").split(",").map((s) => s.trim()).filter((s) => valid.has(s)));
+}
+
+// 물고기 도트 그림 (16x16, 왼쪽을 본다)
+const fishCache = {};
+function fishSprite(id) {
+  if (fishCache[id]) return fishCache[id];
+  const cv = document.createElement("canvas");
+  cv.width = 16; cv.height = 16;
+  const x = cv.getContext("2d");
+  const g = Array.from({ length: 16 }, () => new Array(16).fill(0));
+  const col = Array.from({ length: 16 }, () => new Array(16).fill(null));
+  const el = (cx, cy, rx, ry, c) => {
+    for (let r = 0; r < 16; r++) for (let q = 0; q < 16; q++) {
+      const dx = (q - cx) / rx, dy = (r - cy) / ry;
+      if (dx * dx + dy * dy <= 1) { g[r][q] = 1; col[r][q] = c; }
+    }
+  };
+  const px = (q, r, c) => { if (r >= 0 && r < 16 && q >= 0 && q < 16) { g[r][q] = 1; col[r][q] = c; } };
+  const tail = (q0, cy, h, c) => { // 오른쪽 꼬리 (세모 두 갈래)
+    for (let i = 0; i < 4; i++) for (let d = -Math.min(h, i + 1); d <= Math.min(h, i + 1); d++) {
+      if (Math.abs(d) >= i - 1 || i < 2) px(q0 + i, cy + d, c);
+    }
+  };
+  let eye = [4, 7], belly = null, deco = null;
+  if (id === "bungeo") { // 붕어빵 물고기: 노릇한 빵, 비늘 무늬 줄, 지느러미까지 빵
+    el(7, 8, 6, 4.2, "#D99A4E"); tail(12, 8, 3, "#C9863E");
+    px(6, 3, "#C9863E"); px(7, 3, "#C9863E"); px(8, 3, "#C9863E"); px(7, 2, "#C9863E"); // 등지느러미
+    deco = () => { // 빵 굽기 무늬 (격자)
+      for (const [q, r] of [[6, 7], [8, 7], [10, 7], [7, 9], [9, 9], [5, 9], [8, 11], [6, 5], [9, 5]]) { if (g[r][q]) col[r][q] = "#B87536"; }
+      for (let q = 2; q < 12; q++) if (g[6][q] && q % 2) col[6][q] = "#E9B86A";
+    };
+    eye = [3, 7];
+  } else if (id === "mackerel") { // 고등어: 푸른 등 + 검은 물결 줄 + 은빛 배
+    el(7, 8, 6.2, 3.4, "#5A8FB8"); tail(12, 8, 3, "#4A7AA0");
+    belly = "#DDE6EC";
+    deco = () => { for (const [q, r] of [[5, 6], [6, 7], [8, 6], [9, 7], [11, 6], [7, 5], [10, 5]]) if (g[r][q]) col[r][q] = "#2E4E6E"; };
+    eye = [3, 7];
+  } else if (id === "seabream") { // 도미: 분홍빛 붉은 몸, 높은 등
+    el(7, 8, 5.6, 4.6, "#E88A8A"); tail(12, 8, 3, "#D97070");
+    for (let q = 5; q <= 9; q++) px(q, 3, "#D97070"); px(7, 2, "#D97070");
+    belly = "#F8D2CC";
+    deco = () => { for (const [q, r] of [[6, 6], [8, 6], [10, 7], [7, 8]]) if (g[r][q]) col[r][q] = "#7FC6E8"; }; // 푸른 점
+    eye = [3, 7];
+  } else if (id === "puffer") { // 복어: 동그란 몸 + 작은 점
+    el(7, 8, 5.2, 5, "#F2D27A"); tail(12, 8, 2, "#E0B85A");
+    belly = "#FFF4D6";
+    deco = () => { for (const [q, r] of [[6, 5], [9, 5], [7, 7], [10, 7], [5, 7], [8, 4]]) if (g[r][q]) col[r][q] = "#8A6A3A"; };
+    eye = [4, 6];
+  } else if (id === "hairtail") { // 갈치: 길고 가는 은빛 몸
+    for (let q = 2; q <= 11; q++) { px(q, 6, "#E8EDF3"); px(q, 7, "#D8DEE6"); px(q, 8, "#C3CBD6"); }
+    px(1, 7, "#D8DEE6"); px(1, 8, "#C3CBD6"); px(0, 8, "#C3CBD6");           // 뾰족한 입
+    for (let q = 12; q <= 13; q++) { px(q, 7, "#D8DEE6"); px(q, 8, "#C3CBD6"); }
+    px(14, 8, "#C3CBD6"); px(15, 9, "#C3CBD6");                              // 가늘어지는 꼬리
+    for (let q = 4; q <= 11; q++) if (q % 2 === 0) px(q, 5, "#F2E3A6");       // 등지느러미
+    eye = [3, 6];
+  } else { // 광어: 넓적한 갈색 몸 + 얼룩, 두 눈이 한쪽에
+    el(7, 8, 6.4, 4.6, "#A8875E"); tail(13, 8, 2, "#94744E");
+    deco = () => { for (const [q, r] of [[6, 6], [9, 7], [7, 10], [10, 10], [4, 9]]) if (g[r][q]) col[r][q] = "#7A5E3E"; };
+    eye = [4, 6];
+  }
+  // 그늘 (아래쪽 가장자리) + 배
+  for (let r = 0; r < 16; r++) for (let q = 0; q < 16; q++) {
+    if (!g[r][q]) continue;
+    if (belly && r >= 9 && q < 12 && g[r - 1] && g[r - 1][q] && (g[r + 1] || [])[q]) col[r][q] = belly;
+  }
+  if (deco) deco();
+  for (let r = 0; r < 16; r++) for (let q = 0; q < 16; q++) {
+    if (!g[r][q]) continue;
+    x.fillStyle = col[r][q]; x.fillRect(q, r, 1, 1);
+  }
+  // 눈
+  x.fillStyle = "#FFFFFF"; x.fillRect(eye[0], eye[1], 2, 2);
+  x.fillStyle = OUTLINE; x.fillRect(eye[0], eye[1] + 1, 1, 1);
+  if (id === "flatfish") { x.fillStyle = "#FFFFFF"; x.fillRect(eye[0] + 2, eye[1] - 2, 2, 2); x.fillStyle = OUTLINE; x.fillRect(eye[0] + 2, eye[1] - 1, 1, 1); }
+  // 테두리
+  x.fillStyle = OUTLINE;
+  for (let r = 0; r < 16; r++) for (let q = 0; q < 16; q++) {
+    if (g[r][q]) continue;
+    const near = (g[r - 1] || [])[q] || (g[r + 1] || [])[q] || g[r][q - 1] || g[r][q + 1];
+    if (near) x.fillRect(q, r, 1, 1);
+  }
+  fishCache[id] = cv;
+  return cv;
+}
+
+// 낚을 것 고르기: 소금이 없으면 소금 먼저(그대로), 그다음은 물고기 반·바다 재료 반
+function pickCatch() {
+  if (FIRST_PICK.sea && !me.items.has(FIRST_PICK.sea)) return { item: pickFrom("sea") };
+  if (Math.random() < FISH_CHANCE) {
+    const fresh = FISH.filter((f) => !me.fish.has(f.id));
+    const pool = fresh.length ? fresh : FISH;
+    return { fish: pool[Math.floor(Math.random() * pool.length)] };
+  }
+  return { item: pickFrom("sea") };
+}
+
+/* ---------- 낚아채는 모션 (약 1초, 흔들림·번쩍임 없음) ----------
+   0~0.25초 낚싯대를 뒤로 휙 (살짝 휨) · 0.1~0.5초 물보라 · 0.2~0.9초 낚은 것이 포물선으로 캐릭터 머리 위까지.
+   동작 줄이기면 모션 없이 바로 결과. */
+const CATCH_MS = 950;
+let catchAnim = null; // { t0, sprite, bx, by, drops: [] }
+function startCatch(got) {
+  const finish = () => {
+    catchAnim = null;
+    if (got.item) collectCore(got.item, !me.items.has(got.item.id));
+    else collectFish(got.fish);
+  };
+  if (REDUCED) { finish(); return; }
+  const bx = dispX(me) + 38, by = dispY(me) + 38; // 찌 자리 (월드 좌표)
+  const drops = Array.from({ length: 12 }, (_, i) => ({
+    a: -Math.PI / 2 + (i / 11 - 0.5) * 2.2, sp: 70 + (i * 37) % 60, c: i % 3 ? "#FFFFFF" : "#BFE3F5",
+  }));
+  catchAnim = { t0: performance.now(), sprite: got.item ? itemSprite(got.item.id) : fishSprite(got.fish.id), bx, by, drops };
+  playTone("gather");
+  setTimeout(finish, CATCH_MS);
+}
+// 낚싯대 끝이 어디까지 젖혀졌는지 (0: 앞, 1: 뒤로 다 젖힘)
+function catchJerk(now) {
+  if (!catchAnim) return 0;
+  const t = (now - catchAnim.t0) / 1000;
+  if (t < 0.25) return t / 0.25;                // 휙
+  if (t < 0.7) return 1;                         // 젖힌 채로
+  return Math.max(0, 1 - (t - 0.7) / 0.25);      // 천천히 돌아옴
+}
+// 물보라와 날아오는 것 (캐릭터·이름표 위에 그린다)
+function drawCatchAnim(now) {
+  if (!catchAnim) return;
+  const t = (now - catchAnim.t0) / 1000;
+  const bx = catchAnim.bx - cam.x, by = catchAnim.by - cam.y;
+  if (t > 0.1 && t < 0.55) { // 물보라: 퐁 튀었다가 떨어지며 옅어진다
+    const k = (t - 0.1) / 0.45;
+    ctx.globalAlpha = 1 - k;
+    for (const d of catchAnim.drops) {
+      const s = d.sp * k * 0.45;
+      ctx.fillStyle = d.c;
+      ctx.fillRect(Math.round(bx + Math.cos(d.a) * s) - 2, Math.round(by + Math.sin(d.a) * s + 60 * k * k) - 2, 4, 4);
+    }
+    ctx.globalAlpha = 1;
+    ctx.strokeStyle = `rgba(255,255,255,${0.9 * (1 - k)})`; ctx.lineWidth = 2; // 물결
+    ctx.beginPath(); ctx.ellipse(bx, by + 4, 8 + k * 16, 3 + k * 5, 0, 0, Math.PI * 2); ctx.stroke();
+  }
+  if (t > 0.2) { // 포물선: 찌 → 캐릭터 머리 위
+    const p = catchObjScreen(now);
+    ctx.drawImage(catchAnim.sprite, Math.round(p.x - p.size / 2), Math.round(p.y - p.size / 2), p.size, p.size);
+  }
+}
+// 낚은 것의 화면 위치 (0.2초 전에는 찌 자리). 낚싯줄도 여기를 따라간다
+function catchObjScreen(now) {
+  if (!catchAnim) return null;
+  const t = (now - catchAnim.t0) / 1000;
+  const bx = catchAnim.bx - cam.x, by = catchAnim.by - cam.y;
+  const k = Math.max(0, Math.min(1, (t - 0.2) / 0.7));
+  const hx = dispX(me) - cam.x, hy = dispY(me) - cam.y - CHAR_SIZE - 14;
+  return {
+    x: bx + (hx - bx) * k,
+    y: by + (hy - by) * k - Math.sin(Math.PI * k) * 70,
+    size: 26 + 14 * Math.sin(Math.PI * Math.min(1, k * 1.2)),
+  };
+}
+
+// 물고기를 손에 넣었을 때: 크게 보여 주기 + 물고기 도감 + 저장 (바구니·제빵소와는 상관없음)
+function collectFish(f) {
+  const isNew = !me.fish.has(f.id);
+  me.fish.add(f.id);
+  saveItems(); // 재료와 같은 요청에 물고기 목록도 함께 (바구니에는 세지 않는다)
+  me.hopUntil = performance.now() + 300;
+  showFishCard(f, isNew);
+}
+let fishCardTimer = 0;
+function showFishCard(f, isNew) {
+  const el = $("fishCard");
+  const cv = $("fishCardCanvas");
+  const x = cv.getContext("2d");
+  x.imageSmoothingEnabled = false;
+  x.clearRect(0, 0, cv.width, cv.height);
+  x.drawImage(fishSprite(f.id), 0, 0, cv.width, cv.height);
+  $("fishCardTitle").textContent = `${josaOf(f.name, "을", "를")} 낚았어요!`;
+  $("fishCardText").textContent = isNew ? "물고기 도감에 들어갔어요." : "또 만났어요. 반가워요!";
+  el.classList.remove("hidden", "out");
+  void el.offsetWidth;
+  el.classList.add("in");
+  if (isNew) playTone("dex");
+  clearTimeout(fishCardTimer);
+  fishCardTimer = setTimeout(closeFishCard, 2600);
+}
+function closeFishCard() {
+  const el = $("fishCard");
+  if (el.classList.contains("hidden")) return;
+  clearTimeout(fishCardTimer);
+  el.classList.remove("in");
+  el.classList.add("out");
+  setTimeout(() => { el.classList.add("hidden"); el.classList.remove("out"); }, 300);
+}
+
+// 서버가 보내 준 물고기 목록 + 이 컴퓨터에 남은 같은 학생의 기록을 합친다
+// (새 Code.gs를 배포하기 전에 낚은 물고기도 잃지 않고, 다음 저장 때 시트로 올라간다)
+function applyServerFish(res) {
+  let local = new Set();
+  try {
+    const saved = JSON.parse(localStorage.getItem(SAVE_KEY) || "null");
+    if (saved && saved.id === res.id) local = parseFish((saved.fish || []).join(","));
+  } catch (e) { /* 무시 */ }
+  me.fish = new Set([...parseFish(res.fish), ...local]);
+}
+
 function setCooldown(key, c, r, durMin) {
   cooldowns[key] = { t: Date.now() + durMin * 60 * 1000, c, r };
   try { localStorage.setItem(GATHER_KEY, JSON.stringify(cooldowns)); } catch (e) { /* 무시 */ }
@@ -3185,14 +3435,18 @@ function seaCoolLeft() {
   return Math.min(coolLeft("sea"), FISH_REST_MIN * 60 * 1000);
 }
 
-/* ---------- 낚시 (낚시 자리에 앉아서: 던지기 → 찌 2~4초 → 당기기) ----------
-   me.fishing: null | { phase: "wait", biteAt } | { phase: "bite" }
+/* ---------- 낚시 (낚시 자리에 앉아서: 던지기 → 찌 4~8초 → 당기기) ----------
+   me.fishing: null | { phase: "wait", biteAt, fakeAt } | { phase: "bite" }
+   - 기다리는 시간은 매번 4~8초 사이에서 달라져요.
+   - 진짜 입질 전에 0~1번 "가짜 입질"(찌가 작게 한 번 톡)이 있어요. "!"·소리·버튼은 없어요.
+   - 동작 줄이기면 가짜 입질 없이, 시간이 되면 바로 "!"가 나와요.
    - 당기기 버튼은 계속 기다려요. 늦게 눌러도 놓치지 않아요.
    - 일어나거나 걸으면 낚시가 멈춰요. */
 function fishState(now) {
   if (!VILLAGE_CFG.gatherOpen) { me.fishing = null; return null; } // 수업 시간에는 버튼이 없다
+  if (catchAnim) return null; // 낚아채는 중에는 버튼을 숨긴다
   if (me.fishing && me.fishing.phase === "wait") {
-    if (now < me.fishing.biteAt) return null; // 찌가 흔들리는 중
+    if (now < me.fishing.biteAt) return null; // 찌를 보며 기다리는 중 (버튼 없음)
     me.fishing = { phase: "bite" };
     playTone("gather"); // 물었다는 알림 소리
   }
@@ -3233,14 +3487,17 @@ function fishAction(mode) {
   }
   if (mode === "cast") {
     if (me.fishing || !VILLAGE_CFG.gatherOpen || seaCoolLeft() > 0) return;
-    me.fishing = { phase: "wait", biteAt: performance.now() + 2000 + Math.random() * 2000 };
+    const t0 = performance.now();
+    const biteAt = t0 + 4000 + Math.random() * 4000; // 4~8초
+    // 가짜 입질 0~1번: 던지고 1.5초 뒤부터, 진짜 입질 1.5초 전까지 사이 (동작 줄이기면 없음)
+    const fakeAt = !REDUCED && Math.random() < 0.5 ? t0 + 1500 + Math.random() * Math.max(0, biteAt - t0 - 3000) : 0;
+    me.fishing = { phase: "wait", biteAt, fakeAt };
   } else if (mode === "pull") {
     if (!me.fishing || me.fishing.phase !== "bite") return;
     me.fishing = null;
-    const pick = pickFrom("sea");
-    const isNew = !me.items.has(pick.id);
+    const got = pickCatch(); // 바다 재료 또는 물고기 (꽝 없음)
     setCooldown("sea", b.c, b.r + 1, FISH_REST_MIN); // 자리 바로 아래 바다 칸
-    collectCore(pick, isNew);
+    startCatch(got);         // 낚싯대를 휙 채는 모션 뒤에 결과 (동작 줄이기면 바로)
   } else return;
   gatherSpot = null;
   $("gatherBtn").classList.add("hidden");
@@ -3616,15 +3873,408 @@ function drawSaltRollFlat(x2, cx, cy, roll) {
   }
 }
 
+
+/* ============================================================
+   머랭 케이크 — 1층 머랭 받침, 2층 크림, 3층 토핑을 쌓아요
+   - 도감에 있는 재료로만 만들고, 구워도 도감 재료는 없어지지 않아요.
+   - 실패와 시간 제한이 없어요. 내가 쌓은 모습 그대로 선반에 남아요.
+   ============================================================ */
+const MERINGUE_INGS = [      // 머랭 계량 재료
+  { name: "설탕",    josa: "을" },
+  { name: "달걀흰자", josa: "를" },
+];
+const MERINGUE_NEEDS = [     // 1층 머랭에 필요한 도감 재료
+  { id: "egg",   name: "달걀", ga: "이", hint: "닭에게 가 봐요" },
+  { id: "sugar", name: "설탕", ga: "이", hint: "땅의 반짝이를 주워 봐요" },
+];
+// 2층 크림 4가지 (도감 재료로만)
+const CREAMS = [
+  { id: "fresh",  name: "생크림",   needs: ["milk"],               c: "#FFF6E2", hi: "#FFFFFF", sh: "#E6D6B4" },
+  { id: "choco",  name: "초코 크림", needs: ["chocolate"],          c: "#9A6238", hi: "#B57A4C", sh: "#6E4326" },
+  { id: "butter", name: "버터크림",  needs: ["butter"],             c: "#F8E6A0", hi: "#FFF4C8", sh: "#DEC46E" },
+  { id: "berry",  name: "딸기 크림", needs: ["milk", "strawberry"], c: "#F9C6D2", hi: "#FFE2E9", sh: "#E39FB2" },
+];
+// 3층 토핑 9가지 (3×3 칸 순서). 바다 재료(소금·해초·조개·미역·멸치)는 올리지 않아요
+const TOPPINGS = ["strawberry", "blueberry", "cherry", "apple", "banana", "coconut", "walnut", "almond", "honey"];
+const TOPPING_MAX = 3;
+
+// 받침 글자: 마지막 글자에 받침이 있으면 앞 글자, 없으면 뒤 글자
+function josaOf(word, withB, withoutB) {
+  const ch = word.charCodeAt(word.length - 1);
+  if (ch < 0xAC00 || ch > 0xD7A3) return word + withoutB;
+  return word + ((ch - 0xAC00) % 28 ? withB : withoutB);
+}
+// 재료를 어디서 얻는지
+function itemHint(id) {
+  if (id === "milk") return "젖소에게 가 봐요";
+  if (id === "egg") return "닭에게 가 봐요";
+  const it = ITEMS.find((v) => v.id === id);
+  if (!it) return "마을을 둘러봐요";
+  if (it.from === "tree") return "나무를 흔들어 봐요";
+  if (it.from === "sea") return "바다에서 낚시해 봐요";
+  return "땅의 반짝이를 주워 봐요";
+}
+const itemName = (id) => (ITEMS.find((v) => v.id === id) || { name: id }).name;
+
+/* 머랭 케이크 그림 (26칸 도트 기준, S배로 그린다)
+   o: { base, baked, cream, tops, creamDy, topDy:{id:dy} }  dy는 칸 단위 (위에서 내려앉는 움직임) */
+function drawMeringue(x2, ox, oy, S, o) {
+  const shapes = [];   // [c, r, w, h, color, dy]
+  const outlines = []; // [c, r, w, h, dy]
+  const add = (c, r, w, h, col, dy) => shapes.push([c, r, w, h, col, dy || 0]);
+  const line = (c, r, w, h, dy) => outlines.push([c - 1, r - 1, w + 2, h + 2, dy || 0]);
+  const flush = () => {
+    x2.fillStyle = OUTLINE;
+    for (const [c, r, w, h, dy] of outlines) x2.fillRect(ox + c * S, oy + (r + dy) * S, w * S, h * S);
+    for (const [c, r, w, h, col, dy] of shapes) { x2.fillStyle = col; x2.fillRect(ox + c * S, oy + (r + dy) * S, w * S, h * S); }
+    shapes.length = 0; outlines.length = 0;
+  };
+  // 접시
+  if (o.base) {
+    line(1, 24, 24, 1); add(1, 24, 24, 1, "#E4DCCF"); flush();
+  }
+  // 1층: 짤주머니로 짠 무늬가 있는 머랭 받침
+  if (o.base) {
+    const body = o.baked ? "#FFF7E8" : "#FFFFFF";
+    const tip = o.baked ? "#F1D7A6" : "#F4F1EC";
+    const ridge = o.baked ? "#EBD9BA" : "#E5E0D8";
+    line(3, 18, 20, 6);
+    for (const c0 of [3, 7, 11, 15, 19]) { line(c0, 17, 4, 1); line(c0 + 1, 16, 2, 1); }
+    add(3, 18, 20, 6, body);
+    for (const c0 of [3, 7, 11, 15, 19]) { add(c0, 17, 4, 1, body); add(c0 + 1, 16, 2, 1, tip); }
+    for (const c of [5, 9, 13, 17, 21]) add(c, 19, 1, 4, ridge); // 짠 결
+    add(3, 23, 20, 1, ridge);                                    // 바닥 그늘
+    flush();
+  }
+  // 2층: 크림 (위에 살짝 뿔, 옆으로 흘러내린 방울)
+  const cr = CREAMS.find((v) => v.id === o.cream);
+  if (cr) {
+    const dy = o.creamDy || 0;
+    line(5, 10, 16, 6, dy); line(11, 8, 4, 2, dy); line(12, 7, 2, 1, dy);
+    for (const [c, h] of [[7, 2], [11, 1], [15, 2], [19, 1]]) line(c, 16, 1, h, dy);
+    add(5, 10, 16, 6, cr.c, dy); add(11, 8, 4, 2, cr.c, dy); add(12, 7, 2, 1, cr.hi, dy);
+    for (const [c, h] of [[7, 2], [11, 1], [15, 2], [19, 1]]) { add(c, 16, 1, h, cr.c, dy); add(c, 15 + h, 1, 1, cr.sh, dy); }
+    add(6, 10, 5, 1, cr.hi, dy);   // 윗면 반짝임
+    add(5, 15, 16, 1, cr.sh, dy);  // 아래 그늘
+    flush();
+  }
+  // 3층: 토핑 (최대 3개, 도감 그림 그대로)
+  const tops = (o.tops || []).slice(0, TOPPING_MAX);
+  const xs = tops.length === 1 ? [13] : tops.length === 2 ? [9, 17] : [8, 13, 18];
+  const topR = cr ? 3 : (o.base ? 9 : 12);
+  tops.forEach((id, i) => {
+    const r = topR - (tops.length === 3 && i === 1 ? 1 : 0);
+    const dy = (o.topDy && o.topDy[id]) || 0;
+    x2.drawImage(itemSprite(id), ox + (xs[i] - 4) * S, oy + (r + dy) * S, 8 * S, 8 * S);
+  });
+}
+
+// 작은 그림 (26x26): 선반·버튼·층 표시용
+const meringueCache = {};
+function meringueSprite(cream, tops, opt) {
+  const o = opt || {};
+  const key = [cream || "-", (tops || []).join("+"), o.noBase ? 0 : 1, o.raw ? 0 : 1].join("_");
+  if (meringueCache[key]) return meringueCache[key];
+  const cv = document.createElement("canvas");
+  cv.width = 26; cv.height = 26;
+  const x = cv.getContext("2d");
+  x.imageSmoothingEnabled = false;
+  drawMeringue(x, 0, o.noBase ? 6 : 0, 1, { base: !o.noBase, baked: !o.raw, cream, tops });
+  meringueCache[key] = cv;
+  return cv;
+}
+
+// 거품 내기 그릇: 투명한 흰자 → 하얀 거품 → 뿔이 선 머랭 (n: 0~5)
+function drawWhiskBowl(x2, w, h, n, wobble) {
+  x2.save();
+  x2.translate(w / 2, h - 6); x2.scale(1.3, 1.3); x2.translate(-w / 2, -(h - 6));
+  const cx = w / 2, by = h - 46;
+  x2.strokeStyle = OUTLINE; x2.lineWidth = 2;
+  if (n < 2) { // 투명한 흰자 + 설탕 알갱이
+    x2.fillStyle = "rgba(226, 238, 242, 0.95)";
+    x2.beginPath(); x2.ellipse(cx, by - 8, 56, 14, 0, 0, Math.PI * 2); x2.fill(); x2.stroke();
+    x2.fillStyle = "#FFFFFF";
+    x2.beginPath(); x2.ellipse(cx - 22, by - 12, 14, 4, -0.2, 0, Math.PI * 2); x2.fill();
+    for (const [dx, dy] of [[8, -10], [18, -6], [28, -11], [-6, -5], [36, -7]]) x2.fillRect(cx + dx, by + dy, 3, 3);
+  } else if (n < 4) { // 하얀 거품 (방울 방울)
+    x2.fillStyle = "#FFFFFF"; x2.strokeStyle = "#D9D2C5";
+    for (const [dx, dy, r2] of [[-38, -8, 12], [-18, -14, 15], [6, -16, 16], [30, -12, 14], [46, -6, 10], [-48, -4, 9], [-4, -4, 12], [20, -4, 11]]) {
+      x2.beginPath(); x2.arc(cx + dx, by + dy, r2, 0, Math.PI * 2); x2.fill(); x2.stroke();
+    }
+  } else { // 단단한 머랭: 하얀 언덕 (+5번이면 뿔이 선다)
+    x2.fillStyle = "#FFFFFF"; x2.strokeStyle = OUTLINE; x2.lineWidth = 2;
+    x2.beginPath(); x2.ellipse(cx, by - 8, 62, 26, 0, Math.PI, 0); x2.closePath(); x2.fill(); x2.stroke();
+    if (n >= 5) {
+      for (const [dx, hh] of [[-30, 26], [0, 38], [28, 28]]) {
+        x2.beginPath();
+        x2.moveTo(cx + dx - 14, by - 22); x2.lineTo(cx + dx, by - 22 - hh); x2.lineTo(cx + dx + 4, by - 22 - hh + 6); // 끝이 살짝 휜 뿔
+        x2.lineTo(cx + dx + 14, by - 22); x2.closePath(); x2.fill(); x2.stroke();
+      }
+    }
+    x2.fillStyle = "#F4F1EC";
+    x2.beginPath(); x2.ellipse(cx - 24, by - 18, 14, 5, -0.3, 0, Math.PI * 2); x2.fill();
+  }
+  // 거품기: 그릇 안에 비스듬히 꽂혀 있다 (철사 아랫부분은 그릇 앞면에 가려져 내용물에 담긴 것처럼 보인다)
+  // 누를 때 살짝 흔들린다. 동작 줄이기면 가만히
+  x2.save();
+  x2.translate(cx + 30, by + 8);
+  x2.rotate(0.55 + wobble);
+  x2.strokeStyle = OUTLINE; x2.lineWidth = 3;
+  x2.fillStyle = "#C98A6B";
+  x2.beginPath(); x2.roundRect(-5, -86, 10, 34, 4); x2.fill(); x2.stroke(); // 손잡이
+  x2.strokeStyle = "#8E98A3"; x2.lineWidth = 3;
+  for (const k of [-10, -4, 4, 10]) {
+    x2.beginPath(); x2.moveTo(0, -52); x2.quadraticCurveTo(k * 1.6, -22, 0, 0); x2.stroke();
+  }
+  x2.restore();
+  // 그릇 (앞면)
+  x2.fillStyle = "#9FC7E0";
+  x2.beginPath(); x2.moveTo(cx - 80, by - 4); x2.lineTo(cx + 80, by - 4);
+  x2.quadraticCurveTo(cx + 70, by + 40, cx, by + 40); x2.quadraticCurveTo(cx - 70, by + 40, cx - 80, by - 4);
+  x2.fill();
+  x2.strokeStyle = OUTLINE; x2.lineWidth = 3; x2.stroke();
+  x2.fillStyle = "#C3E0EF"; x2.fillRect(cx - 80, by - 8, 160, 6);
+  x2.strokeRect(cx - 80, by - 8, 160, 6);
+  x2.restore();
+  // 처음에는 들어가는 재료를 위에 보여 준다 (움직이지 않는 그림)
+  if (n === 0) {
+    [["sugar", "설탕"], ["egg", "흰자"]].forEach(([id, label], i) => {
+      const ix = cx - 60 + i * 120;
+      x2.drawImage(itemSprite(id), ix - 24, 6, 48, 48);
+      x2.fillStyle = "#5B3A1E";
+      x2.font = "bold 20px 'Malgun Gothic', sans-serif";
+      x2.textAlign = "center"; x2.textBaseline = "middle";
+      x2.fillText(label, ix, 66);
+      x2.fillStyle = "#C98A6B";
+      x2.beginPath(); x2.moveTo(ix - 8, 80); x2.lineTo(ix + 8, 80); x2.lineTo(ix, 92); x2.closePath(); x2.fill();
+    });
+  }
+}
+
+// "1층 → 2층 → 3층" 지금 어디인지 (그림 + 글자). 지금 층은 노란 테두리, 끝난 층은 초록 ✓
+function renderTiers(s) {
+  const el = $("bakeTiers");
+  const map = { weigh: 1, weighDone: 1, whisk: 1, oven: 1, tier1: 2, cream: 2, topping: 3, done: 4 };
+  const cur = s && s.kind === "meringue" ? map[s.step] : 0;
+  if (!cur) { el.classList.add("hidden"); el.innerHTML = ""; return; }
+  el.classList.remove("hidden");
+  el.innerHTML = "";
+  const icons = [meringueSprite(null, []), meringueSprite("fresh", []), meringueSprite("fresh", ["strawberry"])];
+  for (let i = 1; i <= 3; i++) {
+    if (i > 1) {
+      const ar = document.createElement("span");
+      ar.className = "tier-arrow"; ar.textContent = "→";
+      el.appendChild(ar);
+    }
+    const chip = document.createElement("span");
+    chip.className = "tier-chip" + (i < cur ? " ok" : i === cur ? " cur" : "");
+    const cv = document.createElement("canvas");
+    cv.width = 26; cv.height = 26;
+    const cx = cv.getContext("2d");
+    cx.imageSmoothingEnabled = false;
+    cx.drawImage(icons[i - 1], 0, 0);
+    const t = document.createElement("b");
+    t.textContent = (i < cur ? "✓" : "") + i + "층";
+    chip.append(cv, t);
+    el.appendChild(chip);
+  }
+}
+
+// 도감 재료 확인 칸 (모은 재료는 초록 ✓, 없는 재료는 회색 그림자)
+function bakeNeedsRow(list) {
+  const row = document.createElement("div");
+  row.className = "bake-needs";
+  for (const n of list) {
+    const got = me.items.has(n.id);
+    const cell = document.createElement("div");
+    cell.className = "bake-need" + (got ? " got" : "");
+    cell.appendChild(itemCanvas(n.id, !got));
+    const label = document.createElement("span");
+    label.textContent = (got ? "✓ " : "") + n.name;
+    cell.appendChild(label);
+    row.appendChild(cell);
+  }
+  return row;
+}
+function itemCanvas(id, shadow) {
+  const cv = document.createElement("canvas");
+  cv.width = 16; cv.height = 16;
+  const x = cv.getContext("2d");
+  x.imageSmoothingEnabled = false;
+  x.drawImage(itemSprite(id), 0, 0);
+  if (shadow) { // 회색 그림자
+    x.globalCompositeOperation = "source-atop";
+    x.fillStyle = "rgba(150,142,130,0.9)";
+    x.fillRect(0, 0, 16, 16);
+  }
+  return cv;
+}
+
+// 머랭 케이크 단계별 화면 (bakeRender에서 부른다). 처리했으면 true
+function meringueRender(s, startWeigh) {
+  const back = { text: "처음으로", click: () => { s.step = "start"; bakeRender(); } };
+  if (s.step === "mCheck") {
+    const missing = MERINGUE_NEEDS.filter((n) => !me.items.has(n.id));
+    if (!missing.length) {
+      bakeUI("재료가 다 있어요! 머랭 케이크를 만들어 봐요.", "", [
+        { text: "만들기 시작", primary: true, click: startWeigh }, back,
+      ]);
+    } else {
+      const m = missing[0];
+      bakeUI(`${m.name}${m.ga} 필요해요. ${m.hint}.`, "", [
+        { text: "마을로 가기", primary: true, click: () => $("bake").classList.add("hidden") }, back,
+      ]);
+    }
+    $("bakeInfo").appendChild(bakeNeedsRow(MERINGUE_NEEDS));
+    return true;
+  }
+  if (s.step === "whisk") {
+    const dots = Array.from({ length: 5 }, (_, i) => `<span class="bake-dot${i < s.whisk ? " full" : ""}"></span>`).join("");
+    let msg = "그릇에 설탕과 흰자를 넣었어요. 휙휙 젓기를 5번 눌러요.";
+    if (s.whisk >= 5) msg = "뿔이 섰어요! 단단한 머랭이 됐어요.";
+    else if (s.whisk >= 4) msg = "거품이 단단해지고 있어요. 한 번 더 저어요.";
+    else if (s.whisk >= 2) msg = "하얀 거품이 생겼어요. 계속 저어요.";
+    else if (s.whisk >= 1) msg = "아직 투명해요. 계속 저어요.";
+    bakeUI(msg, `<div class="bake-dots">${dots}</div>`, s.whisk >= 5 ? [] : [{
+      text: "휙휙 젓기", primary: true,
+      click: () => {
+        s.whisk++;
+        s.whiskAt = performance.now();
+        playTone("gather");
+        bakeRender();
+        if (s.whisk >= 5) setTimeout(() => { if (bake === s) { s.step = "oven"; s.ovenT0 = performance.now(); bakeRender(); } }, 1200);
+      },
+    }]);
+    return true;
+  }
+  if (s.step === "tier1") {
+    bakeUI("1층이 완성됐어요! 이제 2층에 크림을 올려요.", "", [
+      { text: "2층으로", primary: true, click: () => { s.step = "cream"; s.note = ""; bakeRender(); } },
+    ]);
+    return true;
+  }
+  if (s.step === "cream") {
+    const cur = CREAMS.find((c) => c.id === s.cream);
+    const btns = CREAMS.map((cr) => {
+      const miss = cr.needs.find((id) => !me.items.has(id));
+      return {
+        text: cr.name, sprite: meringueSprite(cr.id, [], { noBase: true }), on: s.cream === cr.id, off: !!miss,
+        click: () => {
+          if (miss) { // 아직 못 만드는 크림: 무엇이 필요한지 알려 준다
+            s.note = `${josaOf(cr.name, "을", "를")} 만들려면 ${josaOf(itemName(miss), "이", "가")} 필요해요. ${itemHint(miss)}.`;
+          } else if (s.cream === cr.id) {
+            s.cream = null; s.note = "";
+          } else {
+            s.cream = cr.id; s.creamAt = performance.now(); s.note = ""; playTone("gather");
+          }
+          bakeRender();
+        },
+      };
+    });
+    btns.push({ text: cur ? "3층으로" : "크림 없이 다음으로", primary: true, wide: true,
+      click: () => { s.step = "topping"; s.note = ""; bakeRender(); } });
+    bakeUI(s.note || (cur ? `${josaOf(cur.name, "을", "를")} 올렸어요! 다시 누르면 내려와요.` : "2층에 올릴 크림을 골라요."), "", btns, "grid2");
+    return true;
+  }
+  if (s.step === "topping") {
+    const n = s.tops.length;
+    bakeUI(s.note || (n ? "누르면 올라가고, 다시 누르면 내려와요." : "토핑을 3개까지 골라 올려요."), "", [
+      { text: "다 됐어요", primary: true, click: () => { s.step = "done"; bakeFinish(); bakeRender(); } },
+    ]);
+    const info = $("bakeInfo");
+    const count = document.createElement("div");
+    count.className = "top-count";
+    count.textContent = `올린 토핑 ${n} / ${TOPPING_MAX}`;
+    info.appendChild(count);
+    const grid = document.createElement("div");
+    grid.className = "top-grid";
+    for (const id of TOPPINGS) {
+      const got = me.items.has(id);
+      const on = s.tops.includes(id);
+      const tile = document.createElement("button");
+      tile.className = "top-tile" + (on ? " on" : "") + (got ? "" : " off");
+      tile.appendChild(itemCanvas(id, !got));
+      const nm = document.createElement("span");
+      nm.textContent = (on ? "✓" : "") + itemName(id);
+      tile.appendChild(nm);
+      tile.setAttribute("aria-label", itemName(id) + (on ? " 올렸어요" : got ? "" : " 아직 없어요"));
+      tile.addEventListener("click", () => {
+        if (!got) s.note = `${josaOf(itemName(id), "은", "는")} 아직 없어요. ${itemHint(id)}.`;
+        else if (on) { s.tops = s.tops.filter((v) => v !== id); s.note = ""; }
+        else if (s.tops.length >= TOPPING_MAX) s.note = "토핑은 3개까지 올릴 수 있어요. 하나를 내려 봐요.";
+        else { s.tops.push(id); s.topAt[id] = performance.now(); s.note = ""; playTone("gather"); }
+        bakeRender();
+      });
+      grid.appendChild(tile);
+    }
+    info.appendChild(grid);
+    return true;
+  }
+  return false;
+}
+
+// 머랭 케이크 그림 (매 프레임). 처리했으면 true
+function meringueTick(s, x2, w, h, now) {
+  const drop = (at) => { // 위에서 내려앉기 (0.3초). 동작 줄이기면 바로
+    if (REDUCED || !at) return 0;
+    const t = Math.min(1, (now - at) / 300);
+    return -(1 - t) * (1 - t) * 6;
+  };
+  if (s.step === "mCheck") {
+    drawMeringue(x2, w / 2 - 91, h - 25 * 7, 7, { base: true, baked: true, cream: "fresh", tops: ["strawberry", "blueberry", "cherry"] });
+    return true;
+  }
+  if (s.step === "whisk") {
+    const wob = REDUCED || !s.whiskAt ? 0 : Math.sin(Math.min(1, (now - s.whiskAt) / 300) * Math.PI * 3) * 0.25 * (1 - Math.min(1, (now - s.whiskAt) / 300));
+    drawWhiskBowl(x2, w, h, s.whisk, wob);
+    return true;
+  }
+  if (s.step === "oven") {
+    const k = Math.min(1, (now - s.ovenT0) / BAKE_OVEN_MS);
+    const glow = REDUCED ? 0.4 : 0.25 + 0.35 * (0.5 + 0.5 * Math.sin((2 * Math.PI * now) / 1200));
+    drawBakeOven(x2, w, h, k, glow, (ox, oy, size, alpha) => {
+      x2.save(); x2.globalAlpha = alpha;
+      drawMeringue(x2, ox, oy, size / 26, { base: true, baked: k > 0.55 });
+      x2.restore();
+    });
+    const timer = $("bakeTimer");
+    if (timer) timer.textContent = `${Math.max(0, Math.ceil((BAKE_OVEN_MS - (now - s.ovenT0)) / 1000))}초`;
+    if (k >= 1) { s.step = "tier1"; playTone("gather"); bakeRender(); }
+    return true;
+  }
+  if (["tier1", "cream", "topping", "done"].includes(s.step)) {
+    const S = 8;
+    const topDy = {};
+    for (const id of s.tops) topDy[id] = drop(s.topAt[id]);
+    drawMeringue(x2, w / 2 - 13 * S, h - 26 * S + 4, S, {
+      base: true, baked: true,
+      cream: s.step === "tier1" ? null : s.cream, creamDy: drop(s.creamAt),
+      tops: s.step === "tier1" || s.step === "cream" ? [] : s.tops, topDy,
+    });
+    if (s.step === "done") { // 축하 반짝이 (움직이지 않는 별)
+      x2.fillStyle = "#F6C244";
+      for (const [dx, dy] of [[-130, -60], [130, -48], [-118, 40], [122, 50]]) {
+        x2.save(); x2.translate(w / 2 + dx, h / 2 + dy);
+        x2.fillRect(-2, -8, 4, 16); x2.fillRect(-8, -2, 16, 4);
+        x2.restore();
+      }
+    }
+    return true;
+  }
+  return false;
+}
+
 // 체험 창 UI: 안내 문구 + 버튼 줄 (버튼은 크게)
-function bakeUI(msg, infoHTML, btns) {
+// layout: 버튼 줄 배치 ("grid2" = 두 칸씩). b.off: 아직 못 쓰는 버튼(회색 그림자, 누르면 안내), b.wide: 한 줄 전체
+function bakeUI(msg, infoHTML, btns, layout) {
   $("bakeMsg").textContent = msg;
   $("bakeInfo").innerHTML = infoHTML || "";
   const bb = $("bakeBtns");
   bb.innerHTML = "";
+  bb.className = "bake-btns" + (layout ? " " + layout : "");
   for (const b of btns || []) {
     const el = document.createElement("button");
-    el.className = "bake-btn" + (b.primary ? " primary" : "") + (b.on ? " on" : "");
+    el.className = "bake-btn" + (b.primary ? " primary" : "") + (b.on ? " on" : "") + (b.off ? " off" : "") + (b.wide ? " wide" : "");
     if (b.sprite) {
       const mini = document.createElement("canvas");
       mini.width = 26; mini.height = 26;
@@ -3632,10 +4282,15 @@ function bakeUI(msg, infoHTML, btns) {
       const mx = mini.getContext("2d");
       mx.imageSmoothingEnabled = false;
       mx.drawImage(b.sprite, 0, 0);
+      if (b.off) { // 회색 그림자
+        mx.globalCompositeOperation = "source-atop";
+        mx.fillStyle = "rgba(150,142,130,0.9)";
+        mx.fillRect(0, 0, 26, 26);
+      }
       el.appendChild(mini);
     }
     const span = document.createElement("span");
-    span.textContent = b.text;
+    span.textContent = (b.on ? "✓ " : "") + b.text;
     el.appendChild(span);
     el.addEventListener("click", b.click);
     bb.appendChild(el);
@@ -3647,6 +4302,7 @@ function openBake() {
     step: "start", kind: "ginger", recipe: makeBakeRecipe(BAKE_INGS), ingIdx: 0, grams: 0, needle: 0, touched: false, knead: 0,
     shape: null, decor: { eyes: false, buttons: false, mouth: false }, ovenT0: 0, saved: false,
     roll: 0, salt: 0,
+    whisk: 0, whiskAt: 0, cream: null, creamAt: 0, tops: [], topAt: {}, note: "", // 머랭 케이크
   };
   $("bake").classList.remove("hidden");
   bakeRender();
@@ -3662,12 +4318,22 @@ function bakeRender() {
   if (!bake) return;
   const s = bake;
   const startWeigh = () => { s.step = "weigh"; s.ingIdx = 0; s.grams = s.recipe[0].start; s.needle = 0; s.touched = false; bakeRender(); };
+  renderTiers(s); // 머랭 케이크: 1층 → 2층 → 3층 표시
+  const card = $("bake").querySelector(".bake-card");
+  if (card) card.classList.toggle("topping", s.kind === "meringue" && s.step === "topping");
+  if (card) card.classList.toggle("shelf", s.step === "shelf"); // 선반 화면에서는 진열장만 크게
+  if (s.kind === "meringue" && meringueRender(s, startWeigh)) return;
   if (s.step === "start") {
-    bakeUI("무슨 빵을 구울까요?", "", [
+    bakeUI("무엇을 구울까요?", "", [
       { text: "진저브레드 쿠키", sprite: cookieSprite("man", { eyes: true, buttons: true, mouth: true }, true),
         click: () => { s.kind = "ginger"; s.recipe = makeBakeRecipe(BAKE_INGS); startWeigh(); } },
       { text: "소금빵", sprite: saltBreadSprite(3, true),
         click: () => { s.kind = "salt"; s.recipe = makeBakeRecipe(SALT_INGS); s.step = "saltCheck"; bakeRender(); } },
+      { text: "머랭 케이크", sprite: meringueSprite("fresh", ["strawberry", "blueberry", "cherry"]),
+        click: () => {
+          s.kind = "meringue"; s.recipe = makeBakeRecipe(MERINGUE_INGS); s.step = "mCheck";
+          s.whisk = 0; s.cream = null; s.tops = []; s.topAt = {}; s.note = ""; bakeRender();
+        } },
       { text: "내 선반", click: () => { s.step = "shelf"; bakeRender(); } },
     ]);
   } else if (s.step === "saltCheck") {
@@ -3719,6 +4385,8 @@ function bakeRender() {
     else if (s.grams > ing.target) msg = "조금 넘쳤어요. 덜기를 눌러요.";
     // 소금빵: 도감의 "밀"이 계량에서는 "밀가루"가 된 이유를 한 줄로 이어 준다
     if (s.kind === "salt" && s.ingIdx === 0 && !s.touched) msg = "밀을 곱게 갈아서 밀가루를 만들었어요. " + msg;
+    // 머랭 케이크: 도감의 "달걀"에서 흰자만 쓴다는 것을 한 줄로 이어 준다
+    if (s.kind === "meringue" && s.ingIdx === 1 && !s.touched) msg = "달걀에서 흰자만 따로 담았어요. " + msg;
     bakeUI(msg,
       `<div class="bake-g">재료 ${s.ingIdx + 1} / ${s.recipe.length} · ${ing.name}<br><b>${s.grams}g</b> <span>/ ${ing.target}g</span></div>`,
       [
@@ -3779,7 +4447,9 @@ function bakeRender() {
       { text: "다 됐어요", primary: true, click: () => { s.step = "done"; bakeFinish(); bakeRender(); } },
     ]);
   } else if (s.step === "done") {
-    bakeUI(s.kind === "salt" ? "고소한 소금빵이 완성됐어요! 정말 잘했어요." : "참 잘 구웠어요! 멋진 진저브레드예요.", "", [
+    bakeUI(s.kind === "salt" ? "고소한 소금빵이 완성됐어요! 정말 잘했어요."
+      : s.kind === "meringue" ? "층층이 머랭 케이크가 완성됐어요! 정말 멋져요."
+      : "참 잘 구웠어요! 멋진 진저브레드예요.", "", [
       { text: "내 선반 보기", primary: true, click: () => { s.step = "shelf"; bakeRender(); } },
       { text: "한 번 더 굽기", click: () => { openBake(); } },
     ]);
@@ -3789,20 +4459,33 @@ function bakeRender() {
       { text: "새로 굽기", primary: true, click: () => { openBake(); } },
       { text: "닫기", click: () => $("bake").classList.add("hidden") },
     ]);
+    // 나무 진열장: 선반 판자 위에 빵이 한 줄에 4개씩 나란히 놓인다 (최근에 구운 것이 맨 위)
     const info = $("bakeInfo");
     info.innerHTML = "";
-    const grid = document.createElement("div");
-    grid.className = "bake-shelf";
-    for (const it of list.slice().reverse()) {
-      const mini = document.createElement("canvas");
-      mini.width = 26; mini.height = 26;
-      mini.className = "bake-mini big";
-      const mx = mini.getContext("2d");
-      mx.imageSmoothingEnabled = false;
-      mx.drawImage(it.kind === "salt" ? saltBreadSprite(3, true) : cookieSprite(it.shape, it.decor, true), 0, 0);
-      grid.appendChild(mini);
+    const cab = document.createElement("div");
+    cab.className = "bake-cabinet";
+    const all = list.slice().reverse();
+    const rows = Math.max(2, Math.ceil(all.length / 4)); // 비어 있어도 판자 두 칸은 보인다
+    for (let r = 0; r < rows; r++) {
+      const row = document.createElement("div");
+      row.className = "shelf-row";
+      const items = document.createElement("div");
+      items.className = "shelf-items";
+      for (const it of all.slice(r * 4, r * 4 + 4)) {
+        const spot = document.createElement("span");
+        spot.className = "shelf-spot";
+        const sprite = it.kind === "salt" ? saltBreadSprite(3, true)
+          : it.kind === "meringue" ? meringueSprite(it.cream || null, Array.isArray(it.tops) ? it.tops : [])
+          : cookieSprite(it.shape, it.decor, true);
+        spot.appendChild(shelfCanvas(sprite));
+        items.appendChild(spot);
+      }
+      const plank = document.createElement("div");
+      plank.className = "shelf-plank";
+      row.append(items, plank);
+      cab.appendChild(row);
     }
-    info.appendChild(grid);
+    info.appendChild(cab);
   }
 }
 
@@ -3821,10 +4504,30 @@ function afterWeighChange() {
         s.needle = 0;
         s.touched = false;
         s.step = "weigh";
-      } else s.step = "knead";
+      } else s.step = s.kind === "meringue" ? "whisk" : "knead";
       bakeRender();
     }, 1200);
   } else bakeRender();
+}
+
+// 선반용 그림: 빵 아랫부분이 판자에 딱 닿게 아래로 맞춘다 (위에 붕 뜨지 않게)
+function shelfCanvas(sprite) {
+  const cv = document.createElement("canvas");
+  cv.width = 26; cv.height = 26;
+  cv.className = "shelf-bread";
+  const x = cv.getContext("2d");
+  x.imageSmoothingEnabled = false;
+  let bottom = 25;
+  try {
+    const d = sprite.getContext("2d").getImageData(0, 0, sprite.width, sprite.height).data;
+    for (bottom = sprite.height - 1; bottom > 0; bottom--) {
+      let hit = false;
+      for (let c = 0; c < sprite.width; c++) if (d[(bottom * sprite.width + c) * 4 + 3] > 0) { hit = true; break; }
+      if (hit) break;
+    }
+  } catch (e) { /* 무시 */ }
+  x.drawImage(sprite, 0, 25 - bottom);
+  return cv;
 }
 
 function bakeFinish() { // 완성: 이 컴퓨터에 한 번만 저장 (반·학생마다 따로)
@@ -3832,6 +4535,7 @@ function bakeFinish() { // 완성: 이 컴퓨터에 한 번만 저장 (반·학�
   if (s.saved) return;
   s.saved = true;
   if (s.kind === "salt") saveBakeEntry({ kind: "salt", t: Date.now() });
+  else if (s.kind === "meringue") saveBakeEntry({ kind: "meringue", cream: s.cream, tops: s.tops.slice(), t: Date.now() }); // 쌓은 모습 그대로
   else saveBakeEntry({ kind: "ginger", shape: s.shape, decor: { ...s.decor }, t: Date.now() });
   spawnSparkle(canvas.width / 2, canvas.height / 2, 24);
   playTone("dex");
@@ -3854,9 +4558,11 @@ function bakeTick(now) {
   };
   const drawSalt = (salt, baked, size) =>
     x2.drawImage(saltBreadSprite(salt, baked), w / 2 - size / 2, h / 2 - size / 2 + 8, size, size);
-  if (s.step === "start") { // 두 가지 빵을 나란히
-    x2.drawImage(cookieSprite("man", { eyes: true, buttons: true, mouth: true }, true), w / 2 - 150, h / 2 - 60, 130, 130);
-    x2.drawImage(saltBreadSprite(3, true), w / 2 + 20, h / 2 - 60, 130, 130);
+  if (s.kind === "meringue" && meringueTick(s, x2, w, h, now)) return; // 머랭 케이크 화면
+  if (s.step === "start") { // 세 가지를 나란히
+    x2.drawImage(cookieSprite("man", { eyes: true, buttons: true, mouth: true }, true), w / 2 - 172, h / 2 - 52, 104, 104);
+    x2.drawImage(saltBreadSprite(3, true), w / 2 - 52, h / 2 - 52, 104, 104);
+    x2.drawImage(meringueSprite("fresh", ["strawberry", "blueberry", "cherry"]), w / 2 + 68, h / 2 - 52, 104, 104);
   } else if (s.step === "saltCheck") {
     drawSalt(3, true, 170);
   } else if (s.step === "knead" && s.kind === "salt") {
@@ -3937,16 +4643,27 @@ function bakeTick(now) {
       }
     }
   } else if (s.step === "shelf") {
-    x2.drawImage(cookieSprite("man", { eyes: true, buttons: true, mouth: true }, true), w / 2 - 110, h / 2 - 40, 90, 90);
-    x2.drawImage(saltBreadSprite(3, true), w / 2 + 20, h / 2 - 40, 90, 90);
+    x2.drawImage(cookieSprite("man", { eyes: true, buttons: true, mouth: true }, true), w / 2 - 150, h / 2 - 40, 90, 90);
+    x2.drawImage(saltBreadSprite(3, true), w / 2 - 45, h / 2 - 40, 90, 90);
+    x2.drawImage(meringueSprite("fresh", ["strawberry", "blueberry", "cherry"]), w / 2 + 60, h / 2 - 40, 90, 90);
   }
 }
 
 $("closeBake").addEventListener("click", () => $("bake").classList.add("hidden"));
 
 /* ---------- 재료 도감 창 ---------- */
+let dexTab = "items";
 function openDex() {
-  $("dexBtn").classList.remove("has-new"); // 새로 들어온 재료 표시는 도감을 열면 사라진다
+  renderDex();
+  $("dex").classList.remove("hidden");
+}
+function renderDex() {
+  $("dexTabItems").classList.toggle("on", dexTab === "items");
+  $("dexTabFish").classList.toggle("on", dexTab === "fish");
+  $("dexTitleText").textContent = dexTab === "fish" ? "물고기 도감" : "재료 도감";
+  $("dexCount").classList.toggle("dex-count-big", dexTab === "fish"); // 물고기 도감은 22px
+  if (dexTab === "fish") { renderFishDex(); return; }
+  $("dexGrid").className = "dex-grid";
   $("dexCount").textContent = `모은 재료 ${me.items.size} / ${ITEMS.length}`;
   const grid = $("dexGrid");
   grid.innerHTML = "";
@@ -3970,10 +4687,318 @@ function openDex() {
     cell.appendChild(nm);
     grid.appendChild(cell);
   }
-  $("dex").classList.remove("hidden");
 }
+// 물고기 도감: 6칸. 못 낚은 물고기는 그림자와 "?" (크기·희귀도·순위 없음)
+function renderFishDex() {
+  $("dexCount").textContent = `낚은 물고기 ${FISH.filter((f) => me.fish.has(f.id)).length} / ${FISH.length}`;
+  const grid = $("dexGrid");
+  grid.className = "dex-grid fish-grid";
+  grid.innerHTML = "";
+  for (const f of FISH) {
+    const got = me.fish.has(f.id);
+    const cell = document.createElement("div");
+    cell.className = "dex-cell fish-cell" + (got ? "" : " unknown");
+    const cv = document.createElement("canvas");
+    cv.width = 16; cv.height = 16;
+    const x = cv.getContext("2d");
+    x.imageSmoothingEnabled = false;
+    x.drawImage(fishSprite(f.id), 0, 0);
+    if (!got) {
+      x.globalCompositeOperation = "source-atop";
+      x.fillStyle = "#B9AE9C";
+      x.fillRect(0, 0, 16, 16);
+    }
+    const nm = document.createElement("span");
+    nm.textContent = got ? f.name : "?";
+    cell.append(cv, nm);
+    grid.appendChild(cell);
+  }
+}
+$("dexTabItems").addEventListener("click", () => { dexTab = "items"; renderDex(); });
+$("dexTabFish").addEventListener("click", () => { dexTab = "fish"; renderDex(); });
+$("fishCard").addEventListener("click", closeFishCard);
 $("dexBtn").addEventListener("click", openDex);
 $("closeDex").addEventListener("click", () => $("dex").classList.add("hidden"));
+
+/* ============================================================
+   우리 반 바구니 — 반 친구들이 얻은 재료가 저절로 모여요
+   - 선생님이 시트(마을 탭) "반목표"에 적으면 보이고, 비우면 숨어요.
+   - 숫자는 서버(시트)가 세요. 여기서는 받은 숫자를 보여 주기만 해요.
+   - 다 채우면 긴 식탁에 큰 식빵이 놓이고(목표가 바뀔 때까지), 학생마다 목표당 한 번만 축하해요.
+   ============================================================ */
+let basketState = null; // { key, items:[{id, need, have}], done }
+const BASKET_SEEN_KEY = () => "happybread_basket_" + CLASS + "_" + (me.id || "solo");
+
+function basketTotals(b) {
+  let have = 0, need = 0;
+  for (const it of b.items) { need += it.need; have += Math.min(it.need, it.have); }
+  return { have, need };
+}
+
+function applyBasket(b) {
+  const hud = $("basketHud");
+  const items = b && Array.isArray(b.items)
+    ? b.items
+      .filter((it) => it && ITEMS.some((v) => v.id === it.id))
+      .map((it) => ({ id: it.id, need: Math.max(1, Number(it.need) || 1), have: Math.max(0, Number(it.have) || 0) }))
+    : [];
+  if (!items.length) {
+    basketState = null;
+    hud.classList.add("hidden");
+    $("basket").classList.add("hidden");
+    return;
+  }
+  const done = items.every((it) => it.have >= it.need);
+  basketState = { key: String(b.key || ""), items, done, doneAt: Number(b.doneAt) || 0 };
+  const t = basketTotals(basketState);
+  $("basketHudText").textContent = `${t.have}/${t.need}`;
+  $("basketBarFill").style.width = Math.round((t.have / t.need) * 100) + "%";
+  hud.classList.toggle("done", done);
+  hud.setAttribute("aria-label", `우리 반 바구니 ${t.have}/${t.need}`);
+  hud.classList.remove("hidden");
+  if (!$("basket").classList.contains("hidden")) renderBasket();
+  // 다 채웠어요: 이 학생이 이 목표로 아직 축하를 못 봤으면 한 번만 (새로고침해도 다시 안 나와요)
+  if (done) {
+    let seen = "";
+    try { seen = localStorage.getItem(BASKET_SEEN_KEY()) || ""; } catch (e) { /* 무시 */ }
+    if (seen !== basketState.key) {
+      try { localStorage.setItem(BASKET_SEEN_KEY(), basketState.key); } catch (e) { /* 무시 */ }
+      celebrateBasket();
+    }
+  }
+}
+
+function renderBasket() {
+  const b = basketState;
+  if (!b) return;
+  $("basketSub").textContent = b.done ? "우리 반이 다 채웠어요!" : "다 같이 모으고 있어요.";
+  const grid = $("basketGrid");
+  grid.innerHTML = "";
+  for (const it of b.items) {
+    const info = ITEMS.find((v) => v.id === it.id);
+    const have = Math.min(it.need, it.have);
+    const cell = document.createElement("div");
+    cell.className = "basket-cell" + (have >= it.need ? " full" : "");
+    const cv = document.createElement("canvas");
+    cv.width = 16; cv.height = 16;
+    const x = cv.getContext("2d");
+    x.imageSmoothingEnabled = false;
+    x.drawImage(itemSprite(it.id), 0, 0);
+    const nm = document.createElement("span");
+    nm.className = "bc-name"; nm.textContent = info.name;
+    const num = document.createElement("span");
+    num.className = "bc-num"; num.textContent = `${have}/${it.need}`;
+    cell.append(cv, nm, num);
+    grid.appendChild(cell);
+  }
+}
+$("basketHud").addEventListener("click", () => { renderBasket(); $("basket").classList.remove("hidden"); });
+$("closeBasket").addEventListener("click", () => $("basket").classList.add("hidden"));
+$("basket").addEventListener("click", (e) => { if (e.target === $("basket")) $("basket").classList.add("hidden"); }); // 바깥을 눌러도 닫힌다
+
+/* ============================================================
+   식탁 파티 음악 — 우리 반 바구니를 다 채우면 30분 동안 긴 식탁에서 흐른다
+   (study 폴더 partybgm.js의 곡을 그대로: 다장조 8비트 멜로디, 1분에 120박, 16초 곡)
+   - 식탁 가까이(3칸 안) 가장 크게, 멀어질수록 작아지고 12칸부터는 들리지 않는다.
+   - 효과음을 끄면 함께 꺼진다. 탭이 숨겨지거나 마을 밖이면 1초 안에 작아진다.
+   - 시계에 맞춰 연주한다: 모든 컴퓨터에서 같은 순간에 같은 부분이 나온다.
+   - 아주 작게: 한 음은 0.05 이하로, 효과음(0.11)보다 작다.
+   ============================================================ */
+const PARTY_MS = 30 * 60 * 1000;   // 다 채운 뒤 30분
+const PBGM_NOTE_VOL = 0.05;
+const PBGM_NEAR_PX = 120, PBGM_FAR_PX = 480;
+const PBGM_MELODY = [
+  ["C5", 2], ["E5", 2], ["G5", 2], ["E5", 2],
+  ["F5", 2], ["A5", 2], ["G5", 4],
+  ["E5", 2], ["G5", 2], ["C6", 2], ["G5", 2],
+  ["A5", 2], ["G5", 2], ["E5", 4],
+  ["F5", 2], ["F5", 1], ["G5", 1], ["A5", 2], ["F5", 2],
+  ["E5", 2], ["E5", 1], ["F5", 1], ["G5", 2], ["E5", 2],
+  ["D5", 2], ["E5", 2], ["F5", 2], ["D5", 2],
+  ["C5", 4], [null, 2], ["G4", 2],
+];
+const PBGM_BASS = [
+  ["C3", 2], ["G3", 2], ["C3", 2], ["G3", 2],
+  ["F2", 2], ["C3", 2], ["F2", 2], ["C3", 2],
+  ["C3", 2], ["G3", 2], ["C3", 2], ["G3", 2],
+  ["A2", 2], ["E3", 2], ["A2", 2], ["E3", 2],
+  ["F2", 2], ["C3", 2], ["F2", 2], ["C3", 2],
+  ["C3", 2], ["G3", 2], ["C3", 2], ["G3", 2],
+  ["G2", 2], ["D3", 2], ["G2", 2], ["D3", 2],
+  ["C3", 2], ["G3", 2], ["C3", 2], ["G3", 2],
+];
+const PBGM_EIGHTH_MS = 60000 / 120 / 2;
+const PBGM_LOOP_MS = 64 * PBGM_EIGHTH_MS;   // 16초
+const PBGM_EVENTS = (() => {
+  const semi = { C: 0, D: 2, E: 4, F: 5, G: 7, A: 9, B: 11 };
+  const freq = (n) => { const m = /^([A-G])(\d)$/.exec(n); return 440 * Math.pow(2, (12 * (+m[2] + 1) + semi[m[1]] - 69) / 12); };
+  const out = [];
+  const add = (seq, type, vol) => {
+    let at = 0;
+    for (const [n, k] of seq) { if (n) out.push({ at: at * PBGM_EIGHTH_MS, dur: k * PBGM_EIGHTH_MS, f: freq(n), type, vol }); at += k; }
+  };
+  add(PBGM_MELODY, "triangle", 1);
+  add(PBGM_BASS, "sine", 0.5);
+  return out.sort((a, b) => a.at - b.at);
+})();
+
+// 식탁 네모 가장자리까지의 거리(px). 식탁 위면 0
+function tableDistPx(x, y) {
+  const x0 = LONG_TABLE.c0 * TILE, y0 = LONG_TABLE.r0 * TILE;
+  const x1 = (LONG_TABLE.c0 + LONG_TABLE.w) * TILE, y1 = (LONG_TABLE.r0 + 1) * TILE;
+  return Math.hypot(Math.max(x0 - x, 0, x - x1), Math.max(y0 - y, 0, y - y1));
+}
+function partyOn(nowMs) {
+  return !!(basketState && basketState.done && basketState.doneAt && nowMs < basketState.doneAt + PARTY_MS);
+}
+
+const pbgm = { master: null, timer: 0, cursorWall: null, applied: 0, offTimer: 0 };
+function pbgmTick() {
+  const ctx = audioCtx;
+  if (!ctx || !pbgm.master) return;
+  if (ctx.state !== "running") { pbgm.cursorWall = null; return; } // 멈춘 동안은 음을 쌓지 않는다
+  const wallOff = Date.now() - ctx.currentTime * 1000;
+  const nowWall = ctx.currentTime * 1000 + wallOff;
+  if (pbgm.cursorWall === null) pbgm.cursorWall = nowWall + 50;
+  const until = nowWall + 400;
+  for (let base = Math.floor(pbgm.cursorWall / PBGM_LOOP_MS) * PBGM_LOOP_MS; base < until; base += PBGM_LOOP_MS) {
+    for (const ev of PBGM_EVENTS) {
+      const w = base + ev.at;
+      if (w < pbgm.cursorWall || w >= until) continue;
+      const t = (w - wallOff) / 1000;
+      const o = ctx.createOscillator(), g = ctx.createGain();
+      o.type = ev.type; o.frequency.value = ev.f;
+      const vol = PBGM_NOTE_VOL * ev.vol, end = t + (ev.dur / 1000) * 0.9;
+      g.gain.setValueAtTime(0, t);
+      g.gain.linearRampToValueAtTime(vol, t + 0.01);
+      g.gain.exponentialRampToValueAtTime(0.0001, end);
+      o.connect(g).connect(pbgm.master);
+      o.start(t); o.stop(end + 0.05);
+    }
+  }
+  pbgm.cursorWall = until;
+}
+function pbgmTeardown() {
+  clearInterval(pbgm.timer); clearTimeout(pbgm.offTimer);
+  pbgm.timer = 0; pbgm.offTimer = 0;
+  if (pbgm.master) { try { pbgm.master.disconnect(); } catch (e) { /* 무시 */ } }
+  pbgm.master = null; pbgm.cursorWall = null; pbgm.applied = 0;
+}
+// 매 프레임: 파티 중이고 효과음이 켜져 있고 마을이 보이면, 식탁까지 거리로 크기를 정한다
+function updatePartyBgm() {
+  let v = 0;
+  if (partyOn(Date.now()) && soundEnabled() && !document.hidden && !villageEl.classList.contains("hidden")) {
+    const d = tableDistPx(me.x, me.y);
+    v = d <= PBGM_NEAR_PX ? 1 : d >= PBGM_FAR_PX ? 0 : (PBGM_FAR_PX - d) / (PBGM_FAR_PX - PBGM_NEAR_PX);
+  }
+  if (v > 0) {
+    if (!pbgm.master) {
+      try {
+        if (!audioCtx) audioCtx = new (window.AudioContext || window.webkitAudioContext)();
+        if (audioCtx.state === "suspended") audioCtx.resume();
+        pbgm.master = audioCtx.createGain();
+        pbgm.master.gain.value = 0;
+        pbgm.master.connect(audioCtx.destination);
+        pbgm.applied = 0; pbgm.cursorWall = null;
+        pbgm.timer = setInterval(pbgmTick, 100);
+        pbgmTick();
+      } catch (e) { return; } // 소리를 쓸 수 없어도 다른 기능은 그대로
+    }
+    if (pbgm.offTimer) { clearTimeout(pbgm.offTimer); pbgm.offTimer = 0; }
+  } else if (!pbgm.master) return;
+  if (Math.abs(v - pbgm.applied) >= 0.02 || (v > 0) !== (pbgm.applied > 0)) {
+    pbgm.master.gain.setTargetAtTime(v, audioCtx.currentTime, 0.4);
+    pbgm.applied = v;
+  }
+  if (v === 0 && !pbgm.offTimer) pbgm.offTimer = setTimeout(pbgmTeardown, 1500);
+}
+
+// 이름표 자리 잡기에 쓰는 바구니 표시 영역 (캔버스 좌표)
+function basketHudRect() {
+  const hud = $("basketHud");
+  if (!basketState || hud.classList.contains("hidden")) return null;
+  const a = hud.getBoundingClientRect(), c = canvas.getBoundingClientRect();
+  return { x: a.left - c.left - 4, y: a.top - c.top - 4, w: a.width + 8, h: a.height + 8 };
+}
+
+// 다 채웠을 때: 배너 + (동작 줄이기가 아니면) 식탁 위 폭죽 3번
+function celebrateBasket() {
+  showPraise("우리 반이 해냈어요!", "우리 반 바구니를 다 채웠어요"); // 소리는 배너가 소리 설정대로 한 번 낸다
+  if (REDUCED) return; // 동작 줄이기: 식빵과 글자만
+  const cx = (LONG_TABLE.c0 + LONG_TABLE.w / 2) * TILE, cy = LONG_TABLE.r0 * TILE - 100;
+  const t0 = performance.now();
+  // 하나당 1.3초, 0.8초 간격으로 3번 → 2.9초 안에 끝난다
+  [[0, 0], [-90, 24], [90, 12]].forEach(([dx, dy], i) => {
+    fireworks.push({ x: cx + dx, y: cy + dy, at: t0 + i * 800, ms: FW_MS, seed: i });
+  });
+}
+
+/* 폭죽: 부드러운 색, 깜빡임 없이 천천히 퍼졌다가 서서히 옅어진다 (월드 좌표) */
+const FW_MS = 1300;
+const FW_COLORS = ["#FFD66B", "#F7B2C4", "#9FDCC2", "#BFD7FF", "#FFE7B0"];
+const fireworks = [];
+function drawFireworks() {
+  if (!fireworks.length) return;
+  const now = performance.now();
+  for (let i = fireworks.length - 1; i >= 0; i--) {
+    const f = fireworks[i];
+    const u = (now - f.at) / f.ms;
+    if (u < 0) continue;
+    if (u >= 1) { fireworks.splice(i, 1); continue; }
+    const ease = 1 - Math.pow(1 - u, 3);         // 처음엔 빨리, 나중엔 천천히 퍼진다
+    const rad = 12 + ease * 60;
+    const alpha = u < 0.55 ? 0.9 : 0.9 * (1 - (u - 0.55) / 0.45); // 끝에서 서서히 옅어진다
+    const x0 = f.x - cam.x, y0 = f.y - cam.y + u * 14; // 아주 조금 아래로 내려앉는다
+    if (x0 < -120 || y0 < -120 || x0 > canvas.width + 120 || y0 > canvas.height + 120) continue;
+    ctx.globalAlpha = Math.max(0, alpha);
+    for (let k = 0; k < 14; k++) {
+      const a = (k / 14) * Math.PI * 2 + f.seed * 0.4;
+      ctx.fillStyle = FW_COLORS[(k + f.seed) % FW_COLORS.length];
+      const px = Math.round(x0 + Math.cos(a) * rad), py = Math.round(y0 + Math.sin(a) * rad);
+      ctx.fillRect(px - 3, py - 3, 6, 6);
+      const ix = Math.round(x0 + Math.cos(a) * rad * 0.6), iy = Math.round(y0 + Math.sin(a) * rad * 0.6);
+      ctx.fillRect(ix - 2, iy - 2, 4, 4); // 안쪽 작은 점 (도트 꼬리)
+    }
+    ctx.globalAlpha = 1;
+  }
+}
+
+// 얼굴 없는 큰 식빵 (도트 26x22, 봉우리 두 개)
+let loafCache = null;
+function loafSprite() {
+  if (loafCache) return loafCache;
+  const W = 26, H = 22;
+  const cv = document.createElement("canvas");
+  cv.width = W; cv.height = H;
+  const x = cv.getContext("2d");
+  const g = Array.from({ length: H }, () => new Array(W).fill(0));
+  const top = (c, r) => ((c - 7.5) / 6) ** 2 + ((r - 7) / 6) ** 2 <= 1 || ((c - 17.5) / 6) ** 2 + ((r - 7) / 6) ** 2 <= 1;
+  for (let r = 0; r < H; r++) for (let c = 0; c < W; c++) {
+    const body = r >= 8 && r <= H - 2 && c >= 3 && c <= W - 4;
+    if (top(c, r) || body) g[r][c] = 1;
+  }
+  for (let r = 0; r < H; r++) for (let c = 0; c < W; c++) {
+    if (!g[r][c]) continue;
+    let col = "#F2CF8C";                                   // 노릇한 빵
+    const inTop = top(c, r) && r < 10;
+    if (inTop) col = "#C97F3A";                            // 위 껍질
+    if (inTop && !(g[r - 1] || [])[c]) col = "#A9622A";    // 맨 위 진한 껍질
+    if (!inTop && (c <= 4 || c >= W - 5)) col = "#DDA45C"; // 옆 껍질
+    if (r >= H - 3) col = "#C38544";                       // 아래 껍질
+    x.fillStyle = col; x.fillRect(c, r, 1, 1);
+  }
+  x.fillStyle = "#E2A158"; x.fillRect(5, 3, 3, 1); x.fillRect(15, 3, 3, 1); // 윗면 반짝임
+  x.fillStyle = "#FBE7BC"; x.fillRect(7, 12, 3, 1); x.fillRect(7, 13, 1, 2);
+  // 테두리
+  x.fillStyle = OUTLINE;
+  for (let r = 0; r < H; r++) for (let c = 0; c < W; c++) {
+    if (g[r][c]) continue;
+    const near = (g[r - 1] || [])[c] || (g[r + 1] || [])[c] || g[r][c - 1] || g[r][c + 1];
+    if (near) x.fillRect(c, r, 1, 1);
+  }
+  loafCache = cv;
+  return cv;
+}
 
 /* ============================================================
    사진 찍기 — 지금 서 있는 실제 화면을 그대로 찰칵
@@ -4538,27 +5563,51 @@ function drawLongTable() {
     ctx.strokeStyle = "#D9C9A8"; ctx.lineWidth = 1.5;
     ctx.beginPath(); ctx.ellipse(px, y + 1, 10, 5, 0, 0, Math.PI * 2); ctx.stroke();
   }
-  // 가운데 컵
-  ctx.drawImage(uiIcon("cup"), x + w / 2 - 8, y - 9, 16, 16);
+  // 가운데 컵 (우리 반 바구니를 다 채우면 컵 대신 큰 식빵)
+  if (basketState && basketState.done) {
+    ctx.drawImage(loafSprite(), x + w / 2 - 39, y - 50, 78, 66); // 3배 크기 도트
+  } else {
+    ctx.drawImage(uiIcon("cup"), x + w / 2 - 8, y - 9, 16, 16);
+  }
 }
 
 // 낚싯대: 손에서 앞(아래쪽 바다)으로 뻗고, 줄 끝의 찌가 물 위에서 흔들린다.
 // 물고기가 물면(bite) 찌가 크게 흔들리고 물결이 퍼진다.
-function drawRod(x, y, now, bite) {
+// jerk(0~1): 당기기를 눌렀을 때 뒤로 휙 젖힌 정도. -1이면 보통 낚시 중
+function drawRod(x, y, now, bite, jerk) {
   const hx = x + 10, hy = y - 10;         // 손
-  const tx = x + 36, ty = y + 12;         // 낚싯대 끝 (앞쪽 바다 위)
-  const bob = bite ? Math.sin(now / 55) * 4 : Math.sin(now / 260) * 1.5;
+  const j = Math.max(0, jerk === undefined ? -1 : jerk);
+  // 낚싯대 끝: 앞쪽 바다 위 → 뒤로 젖히면 머리 위 뒤쪽
+  const tx = x + 36 + (-4 - 36) * j, ty = y + 12 + (-58 - 12) * j;
+  // 가짜 입질: 0.35초 동안 찌가 작게 한 번 "톡" 잠겼다 올라온다 (진짜 입질처럼 계속 흔들리지 않는다)
+  const fk = !bite && me.fishing && me.fishing.fakeAt ? (now - me.fishing.fakeAt) / 350 : -1;
+  const nibble = fk >= 0 && fk < 1 ? Math.sin(Math.PI * fk) * 3 : 0;
+  const bob = bite ? Math.sin(now / 55) * 4 : Math.sin(now / 260) * 1.5 + nibble;
   const bx = tx + 2 + (bite ? Math.sin(now / 90) * 2 : 0), by = y + 38 + bob; // 찌 (바다 칸 위)
+  // 젖힐 때는 줄에 끌려 낚싯대가 앞쪽으로 살짝 휜다
+  const mx = (hx + tx) / 2 + 9 * j, my = (hy + ty) / 2 + 7 * j;
   ctx.strokeStyle = OUTLINE; ctx.lineWidth = 5;
-  ctx.beginPath(); ctx.moveTo(hx, hy); ctx.lineTo(tx, ty); ctx.stroke();
+  ctx.beginPath(); ctx.moveTo(hx, hy); ctx.quadraticCurveTo(mx, my, tx, ty); ctx.stroke();
   ctx.strokeStyle = "#B8864C"; ctx.lineWidth = 3;
-  ctx.beginPath(); ctx.moveTo(hx, hy); ctx.lineTo(tx, ty); ctx.stroke();
+  ctx.beginPath(); ctx.moveTo(hx, hy); ctx.quadraticCurveTo(mx, my, tx, ty); ctx.stroke();
+  if (jerk !== undefined && jerk >= 0) { // 낚아채는 중: 줄은 날아오는 것 쪽으로, 찌는 없다
+    const p = catchObjScreen(now);
+    if (p) {
+      ctx.strokeStyle = "rgba(255,255,255,0.95)"; ctx.lineWidth = 1.5;
+      ctx.beginPath(); ctx.moveTo(tx, ty); ctx.lineTo(p.x, p.y); ctx.stroke();
+    }
+    return;
+  }
   ctx.strokeStyle = "rgba(255,255,255,0.95)"; ctx.lineWidth = 1.5; // 낚싯줄
   ctx.beginPath(); ctx.moveTo(tx, ty); ctx.lineTo(bx, by - 4); ctx.stroke();
   if (bite) { // 물결
     const k = (now % 700) / 700;
     ctx.strokeStyle = `rgba(255,255,255,${0.9 - k * 0.8})`; ctx.lineWidth = 2;
     ctx.beginPath(); ctx.ellipse(bx, by + 4, 8 + k * 12, 3 + k * 4, 0, 0, Math.PI * 2); ctx.stroke();
+  } else if (fk >= 0 && fk < 1.6) { // 가짜 입질: 작은 물결 한 번만
+    const k = fk / 1.6;
+    ctx.strokeStyle = `rgba(255,255,255,${0.7 * (1 - k)})`; ctx.lineWidth = 1.5;
+    ctx.beginPath(); ctx.ellipse(bx, by + 4, 5 + k * 6, 2 + k * 2, 0, 0, Math.PI * 2); ctx.stroke();
   }
   ctx.fillStyle = OUTLINE; ctx.fillRect(bx - 4, by - 5, 9, 11);      // 찌 (위 분홍, 아래 흰색)
   ctx.fillStyle = "#F77C9A"; ctx.fillRect(bx - 3, by - 4, 7, 4);
@@ -4805,7 +5854,9 @@ function drawCharacter(ch, isMe, now) {
   ctx.restore();
 
   // 낚시 자리에서 던졌으면 아래(바다 쪽)로 드리운 낚싯대와 찌
-  if (isMe && me.fishing && sitting && sitting.fishing) drawRod(x, y, now, me.fishing.phase === "bite");
+  if (isMe && (me.fishing || catchAnim) && sitting && sitting.fishing) {
+    drawRod(x, y, now, !!(me.fishing && me.fishing.phase === "bite"), catchAnim ? catchJerk(now) : -1);
+  }
   // 이름표는 모든 캐릭터를 그린 뒤 따로 그린다 (layoutAndDrawLabels)
 }
 
@@ -4842,6 +5893,9 @@ function layoutAndDrawLabels(dt) {
 
   const chars = [me, ...friends, ...activeNpcs()]; // 내 이름표가 맨 먼저 자리를 잡는다 (항상 캐릭터 바로 위)
   const placed = [];
+  // 우리 반 바구니 표시(왼쪽 위) 자리는 이름표가 피해 간다
+  const hudR = basketHudRect();
+  if (hudR) placed.push(hudR);
   // 상어 "부캉이" 이름표: 등지느러미 위. 학생 이름표가 이 자리를 피해 간다
   let sharkLbl = null;
   if (seaShark) {
@@ -4975,6 +6029,7 @@ function loop(now) {
   updateGatherButton(now); // 열매 나무·바다·반짝이 근처면 줍기 버튼 보이기
   updateGroundSpots(now);  // 땅의 반짝이는 재료 자리 관리
   updateMission();         // 사무소 캐릭터 대화와 미션 도착 확인
+  updatePartyBgm();        // 바구니를 다 채운 뒤 30분: 식탁 가까이 가면 파티 음악
 
   ctx.clearRect(0, 0, canvas.width, canvas.height);
   drawGround(now);
@@ -5027,7 +6082,9 @@ function loop(now) {
   drawNpcMark(now);
   drawMissionArrow(now);
   drawBiteMark(now);
+  drawCatchAnim(now); // 낚아채는 모션: 물보라와 날아오는 재료·물고기
   drawFloatItem();
+  drawFireworks(); // 우리 반 바구니를 다 채운 순간 식탁 위 폭죽
   updateDrawParticles(dt);
   drawSkyClouds(now);
   drawSnowfall(dt); // 크리스마스면 눈이 천천히 내린다
@@ -5051,6 +6108,9 @@ function setupIcons() {
   $("photoTitle").prepend(mkIcon(uiIcon("camera")));
   // 공지 말풍선
   $("notice").prepend(mkIcon(uiIcon("megaphone")));
+  // 우리 반 바구니
+  $("basketHudIco").appendChild(mkIcon(uiIcon("basket")));
+  $("basketTitle").prepend(mkIcon(uiIcon("basket")));
   // 칭찬 배너의 도트 별
   $("praiseStar").appendChild(mkIcon(uiIcon("spark")));
 }

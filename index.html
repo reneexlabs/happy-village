@@ -50,6 +50,13 @@
     <!-- 상단 공지 말풍선 -->
     <div id="notice" class="notice"><span id="noticeText">행복만빵 마을에 온 걸 환영해요!</span></div>
 
+    <!-- 우리 반 바구니 (반목표가 있을 때만 보여요. 누르면 재료별 숫자) -->
+    <button id="basketHud" class="basket-hud hidden" title="우리 반 바구니" aria-label="우리 반 바구니">
+      <span id="basketHudIco" class="basket-hud-ico"></span>
+      <span class="basket-bar"><span id="basketBarFill" class="basket-bar-fill"></span></span>
+      <span id="basketHudText" class="basket-hud-text">0/0</span>
+    </button>
+
     <!-- 연결 상태 (가짜) -->
     <div id="connStatus" class="conn hidden">마을과 연결 중이에요…</div>
 
@@ -78,6 +85,7 @@
     <!-- 사무소 캐릭터 대화창 -->
     <div id="dialog" class="dialog hidden">
       <div class="dialog-box" id="dialogBox">
+        <button id="dialogClose" class="dialog-close" aria-label="대화 닫기" title="닫기">✕</button>
         <div class="dialog-name" id="dialogName">반죽 촌장</div>
         <p id="dialogText"></p>
         <div class="dialog-next" id="dialogNext">누르면 다음 ▼</div>
@@ -118,6 +126,7 @@
     <div class="card bake-card">
       <button class="close-x" id="closeBake">✕</button>
       <h2 id="bakeTitle">만빵 제빵소</h2>
+      <div id="bakeTiers" class="bake-tiers hidden" aria-label="머랭 케이크 층"></div>
       <p id="bakeMsg" class="bake-msg"></p>
       <canvas id="bakeCanvas" width="360" height="230"></canvas>
       <div id="bakeInfo" class="bake-info"></div>
@@ -129,9 +138,23 @@
   <div id="dex" class="modal hidden">
     <div class="card">
       <button class="close-x" id="closeDex">✕</button>
-      <h2 id="dexTitle">재료 도감</h2>
+      <h2 id="dexTitle"><span id="dexTitleText">재료 도감</span></h2>
+      <div class="dex-tabs">
+        <button id="dexTabItems" class="dex-tab on">재료 도감</button>
+        <button id="dexTabFish" class="dex-tab">물고기 도감</button>
+      </div>
       <p class="bag-sub" id="dexCount">모은 재료 0 / 20</p>
       <div id="dexGrid" class="dex-grid"></div>
+    </div>
+  </div>
+
+  <!-- ========== 우리 반 바구니 ========== -->
+  <div id="basket" class="modal hidden">
+    <div class="card">
+      <button class="close-x" id="closeBasket">✕</button>
+      <h2 id="basketTitle">우리 반 바구니</h2>
+      <p class="basket-sub" id="basketSub">다 같이 모으고 있어요.</p>
+      <div id="basketGrid" class="basket-grid"></div>
     </div>
   </div>
 
@@ -159,6 +182,13 @@
       <button id="retakePhoto" class="small-btn wide">다시 찍기</button>
       <button id="savePhoto" class="big-btn">저장하기</button>
     </div>
+  </div>
+
+  <!-- 물고기를 낚았을 때 크게 보여 주기 (누르면 닫혀요, 걷기·버튼은 막지 않아요) -->
+  <div id="fishCard" class="fish-card hidden" role="status">
+    <canvas id="fishCardCanvas" width="128" height="128"></canvas>
+    <b id="fishCardTitle"></b>
+    <span id="fishCardText"></span>
   </div>
 
   <!-- 칭찬 배너 (중요한 순간에만, 누르면 닫혀요) -->

@@ -464,6 +464,17 @@ h1 .ui-ico, h2 .ui-ico { width: 26px; height: 26px; vertical-align: -3px; }
 }
 @keyframes next-blink { 0%, 100% { opacity: 1; } 50% { opacity: 0.35; } }
 #dialogGo { margin-top: 6px; }
+.dialog-box { position: relative; }
+.dialog-close { /* 대화창 닫기 ✕ (보이는 크기 52px, 누르는 곳은 64px) */
+  position: absolute; top: -18px; right: -14px;
+  width: 52px; height: 52px; border-radius: 50%;
+  font-size: 24px; font-weight: 800; color: var(--choco); font-family: inherit;
+  background: var(--cream); border: 4px solid var(--choco);
+  box-shadow: 0 4px 0 rgba(91, 58, 30, 0.3); cursor: pointer;
+}
+.dialog-close::after { content: ""; position: absolute; inset: -9px; border-radius: 50%; }
+.dialog-close:active { transform: translateY(3px); box-shadow: 0 1px 0 rgba(91, 58, 30, 0.3); }
+@media (prefers-reduced-motion: reduce) { .dialog-close:active { transform: none; filter: brightness(0.92); } }
 
 /* 도우미 설명 */
 .helper-list {
@@ -765,6 +776,39 @@ h1 .ui-ico, h2 .ui-ico { width: 26px; height: 26px; vertical-align: -3px; }
 .bake-dot { width: 26px; height: 26px; border-radius: 50%; border: 3px solid #4A2E14; background: #FFF9EC; display: inline-block; }
 .bake-dot.full { background: #F6C244; }
 .bake-shelf { display: flex; flex-wrap: wrap; gap: 10px; justify-content: center; max-height: 220px; overflow-y: auto; padding: 4px; }
+/* 내 빵 선반: 나무 진열장 + 판자 */
+.bake-card.shelf #bakeCanvas { display: none; }
+.bake-cabinet {
+  max-height: 52vh; overflow-y: auto; margin: 4px auto 0; max-width: 380px;
+  padding: 14px 14px 6px;
+  background: repeating-linear-gradient(90deg, #FBEFD9 0 26px, #F5E4C6 26px 28px); /* 벽 판자 무늬 */
+  border: 4px solid #4A2E14; border-radius: 14px;
+  box-shadow: inset 0 0 0 7px #B97A45, inset 0 0 0 10px #8A5A33, 0 6px 0 rgba(91, 58, 30, 0.3);
+}
+.shelf-row { margin: 0 6px 14px; }
+.shelf-items { display: flex; justify-content: center; align-items: flex-end; gap: 6px; min-height: 64px; }
+.shelf-spot { position: relative; display: block; }
+.shelf-spot::after { /* 판자 위 그림자 */
+  content: ""; position: absolute; left: 10px; right: 10px; bottom: -3px; height: 6px;
+  border-radius: 50%; background: rgba(74, 46, 20, 0.22);
+}
+.shelf-bread { position: relative; z-index: 1; width: 64px; height: 64px; image-rendering: pixelated; display: block; }
+.shelf-plank {
+  position: relative; height: 14px; margin: 0 -8px;
+  background: #C98A5B; border: 3px solid #4A2E14; border-radius: 3px;
+  box-shadow: inset 0 3px 0 #E0A877, 0 5px 0 rgba(74, 46, 20, 0.28);
+}
+.shelf-plank::before, .shelf-plank::after { /* 선반 받침 */
+  content: ""; position: absolute; top: 11px; width: 10px; height: 10px;
+  background: #8A5A33; border: 3px solid #4A2E14; border-top: none; border-radius: 0 0 4px 4px;
+}
+.shelf-plank::before { left: 14px; }
+.shelf-plank::after { right: 14px; }
+@media (max-width: 480px) {
+  .bake-cabinet { padding: 12px 8px 4px; }
+  .shelf-items { gap: 2px; }
+  .shelf-bread { width: 58px; height: 58px; }
+}
 
 /* 공지 말풍선: 5초 뒤 천천히 사라진다 (깜빡임 없이) */
 .notice { transition: opacity 1.6s ease; }
@@ -788,10 +832,6 @@ h1 .ui-ico, h2 .ui-ico { width: 26px; height: 26px; vertical-align: -3px; }
 #dexBtn.dex-bump { animation: dex-bump 150ms ease-out; }
 @keyframes dex-bump { 50% { transform: scale(1.15); } }
 #dexBtn.dex-glow { filter: brightness(1.15); }
-#dexBtn.has-new::after { /* 새로 들어온 재료가 있어요 */
-  content: ""; position: absolute; top: 2px; right: 2px; width: 14px; height: 14px;
-  border-radius: 50%; background: #F6C244; border: 2px solid #4A2E14;
-}
 
 /* ---------- 칭찬 배너 ---------- */
 .praise {
@@ -810,13 +850,122 @@ h1 .ui-ico, h2 .ui-ico { width: 26px; height: 26px; vertical-align: -3px; }
 @keyframes praise-in { from { opacity: 0; transform: translate(-50%, -16px); } to { opacity: 1; transform: translate(-50%, 0); } }
 @keyframes praise-out { to { opacity: 0; transform: translate(-50%, -16px); } }
 
+/* ---------- 우리 반 바구니 ---------- */
+.basket-hud {
+  position: absolute; top: 74px; left: 14px; z-index: 5;
+  height: 64px; min-width: 64px; padding: 0 14px 0 8px;
+  display: inline-flex; align-items: center; gap: 8px;
+  background: #FFF9EC; border: 3px solid #4A2E14; border-radius: 18px;
+  box-shadow: 0 4px 0 rgba(91, 58, 30, 0.3); cursor: pointer; font-family: inherit;
+}
+.basket-hud:active { transform: translateY(3px); box-shadow: 0 1px 0 rgba(91, 58, 30, 0.3); }
+.basket-hud-ico canvas { width: 40px; height: 40px; image-rendering: pixelated; display: block; }
+.basket-bar { width: 64px; height: 14px; border: 2px solid #4A2E14; border-radius: 8px; background: #F2ECE2; overflow: hidden; display: block; }
+.basket-bar-fill { display: block; height: 100%; width: 0; background: #F6C244; transition: width 400ms ease-out; }
+.basket-hud.done .basket-bar-fill { background: #8FD18A; }
+.basket-hud-text { font-size: 22px; font-weight: 800; color: #5B3A1E; white-space: nowrap; }
+.basket-sub { font-size: 22px; font-weight: 700; color: #7A5533; margin-bottom: 14px; word-break: keep-all; }
+.basket-grid { display: grid; grid-template-columns: repeat(auto-fill, minmax(96px, 1fr)); gap: 10px; max-height: 52vh; overflow-y: auto; }
+.basket-cell {
+  min-height: 120px; display: flex; flex-direction: column; align-items: center; justify-content: center; gap: 4px;
+  background: #F2ECE2; border: 3px solid #B9AE9C; border-radius: 14px; color: #5B3A1E;
+}
+.basket-cell canvas { width: 48px; height: 48px; image-rendering: pixelated; }
+.basket-cell .bc-name { font-size: 22px; font-weight: 700; }
+.basket-cell .bc-num { font-size: 24px; font-weight: 800; }
+.basket-cell.full { background: #E6F5E2; border-color: #4E9A55; color: #2F6B33; }
+@media (max-width: 480px) {
+  .basket-hud { top: 94px; left: 10px; } /* 휴대폰: 오른쪽 위 버튼·연결 안내 아래로 비켜서 */
+  .basket-bar { width: 44px; }
+}
+
 /* 동작 줄이기: 움직이지 않고 색·투명도만 */
 @media (prefers-reduced-motion: reduce) {
   .small-btn:active, .bake-btn:active, .back-btn:active, .big-btn:active, .round-btn:active, .dbtn:active { transform: none; filter: brightness(0.92); }
   .enter-btn:active { transform: translate(-50%, -100%); filter: brightness(0.92); }
   .enter-btn.gather:active { transform: translate(-50%, 0); }
+  .basket-hud:active { transform: none; filter: brightness(0.92); }
+  .basket-bar-fill { transition: none; }
   .praise.in { animation: praise-fade-in 300ms ease-out; }
   .praise.out { animation: praise-fade-out 300ms ease-in forwards; }
   @keyframes praise-fade-in { from { opacity: 0; } to { opacity: 1; } }
   @keyframes praise-fade-out { to { opacity: 0; } }
 }
+
+/* ---------- 머랭 케이크 ---------- */
+.bake-card { max-height: calc(100vh - 40px); overflow-y: auto; }
+/* 1층 → 2층 → 3층: 지금 층은 노란 테두리, 끝난 층은 초록 ✓ */
+.bake-tiers { display: flex; align-items: center; justify-content: center; gap: 6px; margin: 2px 0 8px; }
+.tier-chip {
+  display: inline-flex; align-items: center; gap: 4px; padding: 4px 10px 4px 6px;
+  border: 3px solid #D9CFC0; border-radius: 14px; background: #FFF9EC; color: #8C8475;
+}
+.tier-chip canvas { width: 36px; height: 36px; image-rendering: pixelated; display: block; }
+.tier-chip b { font-size: 22px; white-space: nowrap; }
+.tier-chip.cur { border-color: #E0A92E; background: #FFE9A8; color: #5B3A1E; box-shadow: 0 3px 0 rgba(91, 58, 30, 0.25); }
+.tier-chip.ok { border-color: #4E9A55; background: #E6F5E2; color: #2F6B33; }
+.tier-arrow { font-size: 22px; font-weight: 800; color: #B9AE9C; }
+/* 크림 고르기: 두 칸씩, "다음으로"는 한 줄 전체 */
+.bake-btns.grid2 { display: grid; grid-template-columns: 1fr 1fr; gap: 10px; }
+.bake-btns.grid2 .bake-btn { min-width: 0; }
+.bake-btn.wide { grid-column: 1 / -1; }
+.bake-btn.off { background: #F2ECE2; border-style: dashed; border-color: #A89C8A; color: #8C8475; box-shadow: none; }
+/* 토핑 3×3 */
+.top-count { font-size: 22px; font-weight: 700; color: #5B3A1E; margin-bottom: 6px; }
+.top-grid { display: grid; grid-template-columns: repeat(3, 1fr); gap: 8px; max-width: 360px; margin: 0 auto; }
+.top-tile {
+  min-height: 84px; min-width: 64px; padding: 4px 2px;
+  display: flex; flex-direction: column; align-items: center; justify-content: center; gap: 2px;
+  background: #FFF9EC; border: 3px solid #B9AE9C; border-radius: 14px; cursor: pointer;
+  font-family: inherit; font-size: 22px; font-weight: 700; color: #5B3A1E; letter-spacing: -1px; white-space: nowrap;
+  box-shadow: 0 3px 0 rgba(91, 58, 30, 0.2); transition: transform 80ms, box-shadow 80ms;
+}
+.top-tile canvas { width: 40px; height: 40px; image-rendering: pixelated; }
+.top-tile.on { background: #E6F5E2; border-color: #4E9A55; color: #2F6B33; }
+.top-tile.off { background: #F2ECE2; border-style: dashed; border-color: #A89C8A; color: #8C8475; box-shadow: none; }
+.top-tile:active { transform: translateY(3px); box-shadow: 0 0 0 rgba(91, 58, 30, 0.2); }
+/* 휴대폰처럼 낮은 화면: 토핑 고를 때 케이크 그림을 조금 작게 */
+@media (max-height: 900px) {
+  .bake-card.topping #bakeCanvas { width: 235px; height: 150px; }
+}
+@media (max-width: 480px) {
+  .bake-card { padding: 26px 14px 18px; }
+  .bake-tiers { gap: 3px; }
+  .tier-chip { padding: 2px 5px 2px 2px; gap: 2px; border-radius: 12px; }
+  .tier-chip canvas { width: 26px; height: 26px; }
+  .tier-arrow { font-size: 18px; }
+}
+@media (prefers-reduced-motion: reduce) {
+  .top-tile:active { transform: none; filter: brightness(0.92); }
+}
+
+/* ---------- 물고기: 도감 탭 · 물고기 도감 · 낚았을 때 크게 보여 주기 ---------- */
+.dex-tabs { display: grid; grid-template-columns: 1fr 1fr; gap: 8px; margin: 4px 0 10px; }
+.dex-tab {
+  min-height: 64px; font-family: inherit; font-size: 22px; font-weight: 800; color: #8C8475;
+  background: #F2ECE2; border: 3px solid #D9CFC0; border-radius: 16px; cursor: pointer;
+}
+.dex-tab.on { color: #5B3A1E; background: #FFE9A8; border-color: #4A2E14; box-shadow: 0 3px 0 rgba(91, 58, 30, 0.25); }
+.dex-grid.fish-grid { grid-template-columns: repeat(3, 1fr); gap: 10px; }
+.fish-cell { padding: 10px 4px 8px; }
+.fish-cell canvas { width: 64px; height: 64px; }
+.fish-cell span { font-size: 22px; line-height: 1.2; word-break: keep-all; display: block; margin-top: 2px; }
+.fish-card {
+  position: fixed; left: 50%; top: 42%; transform: translate(-50%, -50%); z-index: 72;
+  display: flex; flex-direction: column; align-items: center; gap: 6px;
+  min-width: 260px; max-width: min(90vw, 420px); padding: 18px 26px 20px;
+  background: #FFF9EC; border: 4px solid #4A2E14; border-radius: 24px;
+  box-shadow: 0 8px 0 rgba(91, 58, 30, 0.3); cursor: pointer; text-align: center; color: #5B3A1E;
+}
+.fish-card canvas { width: 128px; height: 128px; image-rendering: pixelated; }
+.fish-card b { font-size: 28px; word-break: keep-all; }
+.fish-card span { font-size: 22px; word-break: keep-all; }
+.fish-card.in { animation: fish-in 300ms ease-out; }
+.fish-card.out { animation: fish-out 300ms ease-in forwards; }
+@keyframes fish-in { from { opacity: 0; transform: translate(-50%, -50%) scale(0.85); } to { opacity: 1; transform: translate(-50%, -50%) scale(1); } }
+@keyframes fish-out { to { opacity: 0; transform: translate(-50%, -50%) scale(0.92); } }
+@media (prefers-reduced-motion: reduce) {
+  .fish-card.in { animation: praise-fade-in 300ms ease-out; }
+  .fish-card.out { animation: praise-fade-out 300ms ease-in forwards; }
+}
+.dex-count-big { font-size: 22px; font-weight: 700; color: #5B3A1E; }
