@@ -802,7 +802,7 @@ function drawBread(x, breadId, clothesHex, propId, sx, sy, S, dir = "down", fram
     const headProp = HEAD_PROPS.includes(propId);
     if (!back || headProp) { // 뒤에서는 머리 소품만 보인다
       if (propId === "headphone" && dir === "side") draw(propSprite("headphone_side"), 2, -1); // 옆모습 전용 헤드폰
-      else draw(propSprite(propId), headProp && dir === "side" ? 2 : 0, headProp ? -3 : 4);
+      else draw(propSprite(dir === "side" && (propId === "camera" || propId === "mic") ? propId + "_side" : propId), headProp && dir === "side" ? 2 : 0, headProp ? -3 : 4);
     }
   }
   if (propId === "cape" && back) draw(propSprite("cape"), 0, 6); // 뒤에서는 망토가 몸을 덮는다
@@ -824,11 +824,11 @@ function propSprite(id) {
     const g = newGrid(), col = {};
     const put = (c, r, color) => { g[r][c] = 1; col[r + "," + c] = color; };
     const P = "#F75E8E", D = "#D13A6A", L = "#FFA3C0";
-    // 머리 오른쪽 위에 딱 붙게 작게 (고리 2칸씩 + 가운데 매듭 + 짧은 꼬리)
-    [[10, 3], [11, 3], [13, 3], [14, 3], [10, 4], [11, 4], [13, 4], [14, 4], [10, 5], [11, 5], [13, 5], [14, 5]].forEach(([c, r]) => put(c, r, P));
-    put(12, 4, D);                 // 매듭
-    put(11, 6, D); put(13, 6, D);  // 꼬리
-    put(10, 3, L); put(13, 3, L);  // 반짝
+    // 머리 꼭대기 오른쪽에 옆으로 넓은 나비 모양 (가운데가 잘록해서 하트처럼 보이지 않게, 눈보다 한참 위)
+    [[9, 2], [10, 2], [14, 2], [15, 2], [9, 3], [10, 3], [11, 3], [13, 3], [14, 3], [15, 3], [9, 4], [10, 4], [14, 4], [15, 4]].forEach(([c, r]) => put(c, r, P));
+    put(12, 3, D);                 // 가운데 매듭
+    put(11, 5, D); put(13, 5, D);  // 짧은 꼬리 (양옆으로 벌어진다)
+    put(9, 2, L); put(14, 2, L);   // 반짝
     for (let r = 0; r < 20; r++) for (let c = 0; c < 20; c++) if (g[r][c]) px(c, r, col[r + "," + c]);
     x.fillStyle = O;
     for (let r = 0; r < 20; r++) for (let c = 0; c < 20; c++) {
@@ -856,26 +856,28 @@ function propSprite(id) {
       const near = (g[r - 1] || [])[c] || (g[r + 1] || [])[c] || g[r][c - 1] || g[r][c + 1];
       if (near) x.fillRect(c, r, 1, 1);
     }
-  } else if (id === "camera" || id === "mic") { // 손에 든 소품 (테두리를 자동으로 둘러 도트 그림답게)
-    const g = newGrid(), col = {};
+  } else if (id === "camera" || id === "mic" || id === "camera_side" || id === "mic_side") { // 테두리를 자동으로 둘러 도트 그림답게
+    const g = newGrid(), col = {}, thin = []; // thin: 테두리 없이 그리는 가는 끈
     const put = (c, r, w, h, color) => {
       for (let rr = r; rr < r + h; rr++) for (let cc = c; cc < c + w; cc++) { g[rr][cc] = 1; col[rr + "," + cc] = color; }
     };
-    if (id === "camera") { // 두 손으로 배 앞에 든 작은 카메라 (양손이 카메라 옆을 잡는다)
-      put(7, 10, 6, 4, "#FFF4E0");            // 몸통 (크림색)
-      put(7, 10, 6, 1, "#F7A8C4");            // 윗판 (분홍)
-      put(8, 9, 2, 1, "#5A5A6E");             // 뷰파인더
-      put(11, 9, 1, 1, "#F75E8E");            // 셔터 단추
-      put(9, 11, 2, 2, "#3B3B4A");            // 렌즈
-      put(9, 11, 1, 1, "#7EC8F2");            // 렌즈 반짝
-      put(12, 11, 1, 1, "#FFE066");           // 플래시
-      put(7, 13, 6, 1, "#EAD9BE");            // 아래 그늘
-    } else { // 오른손에 쥐고 턱 가까이 든 마이크
-      put(12, 7, 3, 3, "#C9CED6");            // 동그란 머리 (은색)
-      put(12, 7, 1, 1, "#FFFFFF");            // 반짝
-      put(13, 8, 1, 1, "#8C8CA0"); put(14, 9, 1, 1, "#8C8CA0"); // 그물 무늬
-      put(12, 10, 3, 1, "#F75E8E");           // 분홍 띠
-      put(13, 11, 1, 3, "#3B3B4A");           // 손잡이
+    const STRAP = "#8A5A33";
+    if (id === "camera") { // 목에 건 끈 + 가슴 앞의 작은 분홍 카메라
+      thin.push([7, 8], [8, 9], [12, 8], [11, 9]);   // 목끈 (V자)
+      put(8, 10, 4, 3, "#FFF4E0");                    // 몸통 (크림색)
+      put(8, 10, 4, 1, "#F7A8C4");                    // 윗판 (분홍)
+      put(9, 11, 2, 2, "#3B3B4A"); put(9, 11, 1, 1, "#7EC8F2"); // 렌즈 + 반짝
+      put(11, 11, 1, 1, "#FFE066");                   // 플래시
+    } else if (id === "camera_side") { // 옆모습: 목끈 하나 + 앞을 보는 렌즈가 튀어나온 카메라
+      thin.push([9, 8], [10, 9]);
+      put(11, 10, 3, 3, "#FFF4E0"); put(11, 10, 3, 1, "#F7A8C4");
+      put(14, 11, 1, 1, "#3B3B4A");                   // 앞으로 나온 렌즈
+      put(13, 11, 1, 1, "#7EC8F2");
+    } else { // 마이크: 손에 쏙 들어오는 작은 크기 (은색 머리 2칸 + 분홍 띠 + 손잡이)
+      const c0 = id === "mic_side" ? 11 : 13;        // 옆모습은 앞으로 내민 손 자리
+      put(c0, 9, 2, 2, "#C9CED6"); put(c0, 9, 1, 1, "#FFFFFF"); put(c0 + 1, 10, 1, 1, "#8C8CA0");
+      put(c0, 11, 2, 1, "#F75E8E");
+      put(c0, 12, 1, 2, "#3B3B4A");
     }
     for (let r = 0; r < 20; r++) for (let c = 0; c < 20; c++) if (g[r][c]) px(c, r, col[r + "," + c]);
     x.fillStyle = O;
@@ -884,6 +886,7 @@ function propSprite(id) {
       const near = (g[r - 1] || [])[c] || (g[r + 1] || [])[c] || g[r][c - 1] || g[r][c + 1];
       if (near) x.fillRect(c, r, 1, 1);
     }
+    for (const [c, r] of thin) px(c, r, STRAP);
   } else if (id === "headphone") {
     box(5, 1, 10, 1, "#F75E8E"); box(4, 2, 1, 2, "#F75E8E"); box(15, 2, 1, 2, "#F75E8E");
     box(3, 8, 3, 4, "#D13A6A"); box(14, 8, 3, 4, "#D13A6A");
@@ -1065,7 +1068,7 @@ function missionDueNearby() {
 }
 function updateGiftOffer(now) {
   if (villageEl.classList.contains("hidden")) return;
-  const busy = !$("notice").classList.contains("fade") || !$("dialog").classList.contains("hidden") || dialog
+  const busy = !$("notice").classList.contains("fade") || !$("dialog").classList.contains("hidden") || dialog || rippleGame
     || !noModalOpen() || praiseShowing || !$("fishCard").classList.contains("hidden");
   if (busy) { entryBusyAt = now; return; }
   if (!giftOffer || me.gifts.has(giftOffer.gift.id)) return;
@@ -2566,6 +2569,7 @@ window.addEventListener("keydown", (e) => {
     e.preventDefault();
   }
   if (e.key === "Escape") { closeModals(); }
+  if (rippleGame && (e.key === " " || e.key === "Enter")) { e.preventDefault(); if (!e.repeat) rippleTap(); return; } // 물결 맞추기
   if (e.key !== " " && e.key !== "Enter") return;
   // 대화창이 열려 있으면 스페이스바/엔터로 다음 문장
   if (!$("dialog").classList.contains("hidden")) {
@@ -2726,7 +2730,10 @@ let pendingFacility = null;
 let walkMarker = null; // {x, y, t}
 let downPos = null;
 
-canvas.addEventListener("pointerdown", (e) => { downPos = [e.clientX, e.clientY]; });
+canvas.addEventListener("pointerdown", (e) => {
+  if (rippleGame) { rippleTap(); downPos = null; return; } // 물결 맞추기 중: 화면 어디를 눌러도 걷지 않고 맞추기로
+  downPos = [e.clientX, e.clientY];
+});
 canvas.addEventListener("pointerup", (e) => {
   if (!downPos) return;
   const moved = Math.hypot(e.clientX - downPos[0], e.clientY - downPos[1]);
@@ -3912,6 +3919,7 @@ function fishState(now) {
     return null;
   }
   if (catchAnim) return null; // 낚아채는 중에는 버튼을 숨긴다
+  if (me.fishing && me.fishing.phase === "game") return null; // 물결 맞추기 중에는 버튼 없이 화면을 누른다
   if (me.fishing && me.fishing.phase === "wait") {
     if (now < me.fishing.biteAt) return null; // 찌를 보며 기다리는 중 (버튼 없음)
     me.fishing = { phase: "bite" };
@@ -3962,15 +3970,133 @@ function fishAction(mode) {
     sendMyPos(true); // 친구 화면에 낚싯대와 찌
   } else if (mode === "pull") {
     if (!me.fishing || me.fishing.phase !== "bite") return;
-    me.fishing = null;
     const got = pickCatch(); // 바다 재료 또는 물고기 (꽝 없음)
-    myCaught = (got.item ? "i:" + got.item.id : "f:" + got.fish.id) + ":" + Date.now().toString(36).slice(-5);
-    sendMyPos(true); // 친구 화면: 낚싯대가 사라지고 머리 위에 낚은 것
-    setCooldown("sea", b.c, b.r + 1, FISH_REST_MIN); // 자리 바로 아래 바다 칸
-    startCatch(got);         // 낚싯대를 휙 채는 모션 뒤에 결과 (동작 줄이기면 바로)
+    if (needsRipple(got)) {
+      startRipple(got); // 처음 낚는 물고기·붕어빵 물고기: 찌 위에서 물결 맞추기 (동그라미 3개를 채우면 낚는다)
+    } else {
+      me.fishing = null;
+      myCaught = (got.item ? "i:" + got.item.id : "f:" + got.fish.id) + ":" + Date.now().toString(36).slice(-5);
+      sendMyPos(true); // 친구 화면: 낚싯대가 사라지고 머리 위에 낚은 것
+      setCooldown("sea", b.c, b.r + 1, FISH_REST_MIN); // 자리 바로 아래 바다 칸
+      startCatch(got);         // 낚아채는 모션 뒤에 결과 (동작 줄이기면 바로)
+    }
   } else return;
   gatherSpot = null;
   $("gatherBtn").classList.add("hidden");
+}
+
+
+/* ============================================================
+   물결 맞추기 — 처음 낚는 물고기와 붕어빵 물고기를 낚을 때만 (찌 위에서 바로)
+   - 찌 둘레의 반짝이는 목표 원 + 바깥에서 천천히 작아지는 동그란 물결
+   - 물결이 목표 원에 겹칠 때 화면 아무 곳이나 / 스페이스바 → "좋아요!" 동그라미 하나
+   - 동그라미 3개 → 지금의 낚아채는 모션 그대로
+   - 실패 없음: 어긋나면 "다시 와요" + 다음 물결은 20% 느리고 맞는 폭 +3px.
+     어긋남이 모두 4번이면 그다음 물결부터는 목표에 닿을 때 저절로 "좋아요!"
+   - 시간 제한 없음. 동작 줄이기면 미니게임 없이 바로 낚는다
+   ============================================================ */
+const RIPPLE = { R0: 72, TARGET: 16, SPEED0: 35, TOL0: 8, TOL_MAX: 17, SLOW: 0.8, GAP_MS: 600, AUTO_AFTER: 4, NEED: 3 };
+let rippleGame = null; // { got, filled, misses, speed, tol, waveT0, gapUntil, msg: {text, kind, at}, startAt }
+let myFloatPos = null; // 내 찌 자리 (화면 좌표, drawRod가 매 프레임 적는다)
+
+function needsRipple(got) {
+  return !!(!REDUCED && got.fish && (!me.fish.has(got.fish.id) || got.fish.id === "bungeo"));
+}
+function startRipple(got) {
+  const now = performance.now();
+  rippleGame = { got, filled: 0, misses: 0, speed: RIPPLE.SPEED0, tol: RIPPLE.TOL0, waveT0: now + 700, gapUntil: now + 700, msg: null, startAt: now };
+  me.fishing = { phase: "game" };
+}
+function rippleRadius(g, now) { return RIPPLE.R0 - g.speed * Math.max(0, now - g.waveT0) / 1000; }
+function rippleNext(g, now, good) {
+  g.msg = { text: good ? "좋아요!" : "다시 와요", kind: good ? "good" : "again", at: now };
+  if (good) { g.filled++; playTone("gather"); }
+  else {
+    g.misses++;
+    g.speed *= RIPPLE.SLOW;
+    g.tol = Math.min(RIPPLE.TOL_MAX, g.tol + 3);
+  }
+  if (g.filled >= RIPPLE.NEED) { finishRipple(); return; }
+  g.gapUntil = now + RIPPLE.GAP_MS;
+  g.waveT0 = g.gapUntil;
+}
+function rippleTap() {
+  const g = rippleGame;
+  if (!g) return;
+  const now = performance.now();
+  if (now < g.gapUntil) return; // 다음 물결이 오기 전에는 세지 않는다
+  const r = rippleRadius(g, now);
+  rippleNext(g, now, Math.abs(r - RIPPLE.TARGET) <= g.tol || g.misses >= RIPPLE.AUTO_AFTER);
+}
+// 매 프레임: 일어나거나 걸으면 끝(낚지 않음), 물결이 목표를 지나가면 어긋남 / 저절로 맞추기
+function updateRipple(now) {
+  const g = rippleGame;
+  if (!g) return;
+  if (!me.fishing || me.fishing.phase !== "game" || !me.sitting || !me.sitting.bench.fishing) { rippleGame = null; return; }
+  if (now < g.gapUntil) return;
+  const r = rippleRadius(g, now);
+  if (g.misses >= RIPPLE.AUTO_AFTER) { if (r <= RIPPLE.TARGET) rippleNext(g, now, true); return; }
+  if (r < RIPPLE.TARGET - g.tol) rippleNext(g, now, false); // 누르지 않고 지나갔어요
+}
+function finishRipple() {
+  const g = rippleGame;
+  rippleGame = null;
+  const b = me.sitting && me.sitting.bench;
+  me.fishing = null;
+  myCaught = "f:" + g.got.fish.id + ":" + Date.now().toString(36).slice(-5);
+  sendMyPos(true); // 친구 화면: 낚싯대가 사라지고 머리 위에 낚은 것
+  if (b) setCooldown("sea", b.c, b.r + 1, FISH_REST_MIN);
+  startCatch(g.got); // 지금의 낚아채는 모션 그대로
+}
+
+// 그리기: 목표 원(반짝이 별 4개가 천천히 돈다) + 작아지는 물결 + 동그라미 3개 + 글씨
+function drawRippleGame(now) {
+  const g = rippleGame;
+  if (!g || !myFloatPos) return;
+  const cx = myFloatPos.x, cy = myFloatPos.y + 2;
+  // 목표 원
+  ctx.lineWidth = 3; ctx.strokeStyle = "rgba(255, 224, 138, 0.95)";
+  ctx.beginPath(); ctx.arc(cx, cy, RIPPLE.TARGET, 0, Math.PI * 2); ctx.stroke();
+  ctx.lineWidth = 1; ctx.strokeStyle = "rgba(255,255,255,0.8)";
+  ctx.beginPath(); ctx.arc(cx, cy, RIPPLE.TARGET - 3, 0, Math.PI * 2); ctx.stroke();
+  for (let i = 0; i < 4; i++) {
+    const a = now / 1800 + i * Math.PI / 2;
+    const sx = cx + Math.cos(a) * RIPPLE.TARGET, sy = cy + Math.sin(a) * RIPPLE.TARGET;
+    ctx.fillStyle = "#FFF4C2"; ctx.fillRect(sx - 1, sy - 4, 2, 8); ctx.fillRect(sx - 4, sy - 1, 8, 2);
+  }
+  // 물결 (다음 물결 전에는 없음). 목표에 가까워지면 조금 진해진다 (깜빡임 없음)
+  if (now >= g.gapUntil) {
+    const r = rippleRadius(g, now);
+    if (r > 2) {
+      const near = Math.abs(r - RIPPLE.TARGET) <= g.tol;
+      ctx.lineWidth = 4; ctx.strokeStyle = near ? "rgba(127, 214, 190, 0.98)" : "rgba(159, 220, 194, 0.85)";
+      ctx.beginPath(); ctx.arc(cx, cy, r, 0, Math.PI * 2); ctx.stroke();
+      ctx.lineWidth = 1.5; ctx.strokeStyle = "rgba(255,255,255,0.85)";
+      ctx.beginPath(); ctx.arc(cx, cy, Math.max(1, r - 3), 0, Math.PI * 2); ctx.stroke();
+    }
+  }
+  // 동그라미 3개 (찌 아래 바다 위)
+  const dy = cy + RIPPLE.R0 + 22;
+  for (let i = 0; i < RIPPLE.NEED; i++) {
+    const dx = cx + (i - 1) * 34;
+    ctx.lineWidth = 3; ctx.strokeStyle = OUTLINE;
+    ctx.fillStyle = i < g.filled ? "#FFD66B" : "rgba(255,255,255,0.9)";
+    ctx.beginPath(); ctx.arc(dx, dy, 12, 0, Math.PI * 2); ctx.fill(); ctx.stroke();
+    if (i < g.filled) { ctx.fillStyle = "#FFF4C2"; ctx.fillRect(dx - 5, dy - 6, 4, 4); }
+  }
+  // 글씨: 처음 안내 → 그다음은 "좋아요!" / "다시 와요" (1초)
+  let text = "", col = "#5B3A1E";
+  if (g.msg && now - g.msg.at < 1000) { text = g.msg.text; col = g.msg.kind === "good" ? "#2F8F6B" : "#7A63B8"; }
+  else if (!g.filled && !g.misses) text = "물결이 반짝이 원에 닿을 때 눌러요!";
+  if (!text) return;
+  ctx.font = "bold 22px 'Malgun Gothic', sans-serif";
+  const lines = wrapLines(text, Math.min(300, canvas.width - 40));
+  const w = Math.max(...lines.map((l) => ctx.measureText(l).width)) + 24, h = lines.length * 30 + 10;
+  const bx = Math.max(10, Math.min(canvas.width - w - 10, cx - w / 2)), by = dy + 22;
+  ctx.fillStyle = "rgba(255,255,255,0.95)"; ctx.strokeStyle = OUTLINE; ctx.lineWidth = 3;
+  ctx.beginPath(); ctx.roundRect(bx, by, w, h, 12); ctx.fill(); ctx.stroke();
+  ctx.fillStyle = col; ctx.textAlign = "center"; ctx.textBaseline = "middle";
+  lines.forEach((l, i) => ctx.fillText(l, bx + w / 2, by + 20 + i * 30));
 }
 
 // 땅의 반짝이는 재료 줍기
@@ -5509,6 +5635,12 @@ function updateHost(nowMs) {
   npc.dir = st.phase === "back" ? ({ left: "right", right: "left", up: "down", down: "up" })[p.dir] : p.dir;
 }
 
+// 촌장 춤: 식탁에 도착해서 1분 (그 뒤에는 서서 말풍선으로 진행)
+const HOST_DANCE_MS = 60000;
+function hostDancingNow(nowMs) {
+  const st = hostPhase(nowMs);
+  return st.phase === "host" && st.since < HOST_DANCE_MS;
+}
 // 파티 진행 말 (식탁에 도착하면 6초, 그 뒤 40초마다 4초씩 차례로)
 const HOST_LINES = ["맛있게 먹어요!", "음악에 맞춰 춤춰요!", "우리 반 최고예요!", "다 같이 모여서 정말 좋아요!"];
 function hostPartyLine(nowMs) {
@@ -6405,6 +6537,7 @@ function drawRod(x, y, now, bite, jerk, friend) {
   const bob = friend ? (REDUCED ? 0 : Math.sin((now + friend) / 260) * 1.5)
     : bite ? Math.sin(now / 55) * 4 : Math.sin(now / 260) * 1.5 + nibble;
   const bx = tx + 2 + (bite ? Math.sin(now / 90) * 2 : 0), by = y + 38 + bob; // 찌 (바다 칸 위)
+  if (!friend) myFloatPos = { x: bx, y: by }; // 물결 맞추기가 이 자리에 그려진다
   // 젖힐 때는 줄에 끌려 낚싯대가 앞쪽으로 살짝 휜다
   const mx = (hx + tx) / 2 + 9 * j, my = (hy + ty) / 2 + 7 * j;
   ctx.strokeStyle = OUTLINE; ctx.lineWidth = 5;
@@ -6673,7 +6806,7 @@ const DANCE_NEAR_PX = 160;
 const DANCE_ALL_MS = 8000;
 let danceAllUntil = 0;
 function danceInfo(ch, sitting) {
-  if (ch !== me && !friends.includes(ch) && !(ch === NPCS[0] && NPCS[0].hosting)) return null; // 촌장은 파티를 진행할 때만
+  if (ch !== me && !friends.includes(ch) && !(ch === NPCS[0] && NPCS[0].hosting && hostDancingNow(Date.now()))) return null; // 촌장은 파티 진행 중 잠깐씩만
   if (ch.moving && !sitting) return null;
   if (sitting && sitting.fishing) return null;
   const nowMs = Date.now();
@@ -6921,6 +7054,7 @@ function loop(now) {
   updatePartyBgm();        // 바구니를 다 채운 뒤 30분: 식탁 가까이 가면 파티 음악
   updateHost(Date.now());  // 파티 동안 반죽 촌장은 식탁에서 진행 (모두에게 같은 자리)
   updateGiftOffer(now);    // 선생님 선물 카드 (공지·미션 대화가 끝난 뒤에)
+  updateRipple(now);       // 물결 맞추기 (처음 낚는 물고기·붕어빵 물고기)
 
   ctx.clearRect(0, 0, canvas.width, canvas.height);
   drawGround(now);
@@ -6974,6 +7108,7 @@ function loop(now) {
   drawHostBubble(now);      // 반죽 촌장 말풍선 (도움말 · 파티 진행 말)
   drawMissionArrow(now);
   drawBiteMark(now);
+  drawRippleGame(now);    // 물결 맞추기: 찌 위의 목표 원·물결·동그라미
   drawFriendCatches(now); // 친구가 낚은 것 (머리 위 그림 2초)
   drawDanceNotes();       // 동작 줄이기일 때 춤 대신 ♪
   drawCatchAnim(now); // 낚아채는 모션: 물보라와 날아오는 재료·물고기
