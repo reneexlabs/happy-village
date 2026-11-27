@@ -67,6 +67,8 @@
       <button id="dexBtn" class="round-btn" title="재료 도감"></button>
       <button id="bagBtn" class="round-btn" title="소품함"></button>
     </div>
+    <!-- 마을에서 나가기 (다음 친구가 같은 컴퓨터로 들어올 수 있게 첫 화면으로) -->
+    <button id="leaveBtn" class="leave-btn" title="마을에서 나가기"></button>
 
     <!-- 왼쪽 아래 방향 버튼 -->
     <div id="dpad" class="dpad">
@@ -155,6 +157,18 @@
       <h2 id="basketTitle">우리 반 바구니</h2>
       <p class="basket-sub" id="basketSub">다 같이 모으고 있어요.</p>
       <div id="basketGrid" class="basket-grid"></div>
+    </div>
+  </div>
+
+  <!-- ========== 마을에서 나가기 묻기 ========== -->
+  <div id="leaveAsk" class="modal hidden">
+    <div class="card leave-card">
+      <p class="leave-title">마을에서 나갈까요?</p>
+      <p class="leave-sub">처음 화면으로 돌아가요.<br>모은 것은 그대로 남아 있어요.</p>
+      <div class="gift-btns">
+        <button id="leaveYes" class="bake-btn primary">나가요</button>
+        <button id="leaveNo" class="bake-btn">더 있을래요</button>
+      </div>
     </div>
   </div>
 

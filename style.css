@@ -984,3 +984,33 @@ h1 .ui-ico, h2 .ui-ico { width: 26px; height: 26px; vertical-align: -3px; }
   font-size: 13px; font-weight: 800; color: #FFFFFF; background: #E8534C; border: 2px solid #4A2E14;
   border-radius: 999px; padding: 1px 8px; white-space: nowrap;
 }
+
+/* ---------- 마을에서 나가기 (오른쪽 위 버튼들 아래) ---------- */
+.leave-btn {
+  position: absolute; top: 86px; right: 14px; z-index: 5;
+  min-width: 64px; height: 64px; padding: 0 16px 0 10px;
+  display: inline-flex; align-items: center; gap: 4px;
+  font-family: inherit; font-size: 22px; font-weight: 800; color: #5B3A1E;
+  background: #FFF9EC; border: 3px solid #4A2E14; border-radius: 18px;
+  box-shadow: 0 4px 0 rgba(91, 58, 30, 0.3); cursor: pointer;
+}
+.leave-btn .ui-ico { width: 32px; height: 32px; image-rendering: pixelated; }
+.leave-btn:active { transform: translateY(3px); box-shadow: 0 1px 0 rgba(91, 58, 30, 0.3); }
+.leave-card { max-width: 380px; }
+.leave-title { font-size: 26px; font-weight: 800; color: #5B3A1E; margin-bottom: 8px; }
+.leave-sub { font-size: 22px; color: #7A5533; line-height: 1.45; margin-bottom: 16px; word-break: keep-all; }
+@media (prefers-reduced-motion: reduce) {
+  .leave-btn:active { transform: none; filter: brightness(0.92); }
+}
+@media (max-width: 480px) {
+  .leave-btn { top: 94px; right: 10px; } /* 휴대폰: 바구니와 같은 높이, 연결 안내 아래로 비켜서 */
+}
+
+/* ---------- 머랭 케이크 토핑: 올린 개수 표시, 하나 내리기 ---------- */
+.top-tile { position: relative; }
+.top-badge {
+  position: absolute; top: -10px; right: -6px;
+  font-size: 22px; font-weight: 800; line-height: 1; color: #FFFFFF;
+  background: #4E9A55; border: 2px solid #2F6B33; border-radius: 999px; padding: 3px 8px;
+}
+.top-undo { grid-column: span 2; flex-direction: row; font-size: 22px; }

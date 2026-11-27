@@ -146,18 +146,18 @@ for (let r = 0; r < ROWS; r++) {
 for (const r of [0, 1]) { blocked[r][43] = true; ground[r][43] = 0; }
 borderTrees.push([43, 0]);
 
-// 나무 18그루: kind P=프레첼 나무, B=딸기 덤불 / fruit 1=열매 나무
+// 나무 18그루: kind P=프레첼 나무, B=딸기 덤불 / fruit 1=열매 나무 (모두 흔들 수 있다)
 const TREES = [
-  { c: 4,  r: 4,  kind: "P", fruit: 1 }, { c: 15, r: 4,  kind: "P", fruit: 0 },
-  { c: 28, r: 4,  kind: "P", fruit: 1 }, { c: 3,  r: 12, kind: "P", fruit: 0 },
+  { c: 4,  r: 4,  kind: "P", fruit: 1 }, { c: 15, r: 4,  kind: "P", fruit: 1 },
+  { c: 28, r: 4,  kind: "P", fruit: 1 }, { c: 3,  r: 12, kind: "P", fruit: 1 },
   { c: 14, r: 12, kind: "P", fruit: 1 }, { c: 31, r: 19, kind: "P", fruit: 1 },
-  { c: 4,  r: 24, kind: "P", fruit: 0 }, { c: 29, r: 24, kind: "P", fruit: 1 },
-  { c: 10, r: 31, kind: "B", fruit: 1 }, { c: 20, r: 32, kind: "B", fruit: 0 },
+  { c: 4,  r: 24, kind: "P", fruit: 1 }, { c: 29, r: 24, kind: "P", fruit: 1 },
+  { c: 10, r: 31, kind: "B", fruit: 1 }, { c: 20, r: 32, kind: "B", fruit: 1 },
   { c: 36, r: 32, kind: "B", fruit: 1 }, { c: 9,  r: 25, kind: "B", fruit: 1 },
-  { c: 41, r: 5,  kind: "B", fruit: 0 },
-  { c: 5,  r: 31, kind: "P", fruit: 0 }, { c: 27, r: 32, kind: "B", fruit: 1 },
-  { c: 16, r: 13, kind: "B", fruit: 0 }, { c: 35, r: 23, kind: "P", fruit: 1 },
-  { c: 40, r: 31, kind: "B", fruit: 0 },
+  { c: 41, r: 5,  kind: "B", fruit: 1 },
+  { c: 5,  r: 31, kind: "P", fruit: 1 }, { c: 27, r: 32, kind: "B", fruit: 1 },
+  { c: 16, r: 13, kind: "B", fruit: 1 }, { c: 35, r: 23, kind: "P", fruit: 1 },
+  { c: 40, r: 31, kind: "B", fruit: 1 },
 ];
 const treeAt = {};      // "c,r" -> 나무 정보
 const fruitSet = new Set(); // 열매 나무 자리
@@ -789,7 +789,7 @@ function drawBread(x, breadId, clothesHex, propId, sx, sy, S, dir = "down", fram
   // 앉으면 몸을 웅크려 조금 낮아진다 (발 위치는 그대로)
   const squash = sit ? 0.86 : 1;
   const draw = (img, dx, dy) => x.drawImage(img, sx + dx * scale, sy + (dy + 32 * (1 - squash)) * scale, S, S * squash);
-  if (propId === "cape" && !back) draw(propSprite("cape"), 0, 6); // 앞에서는 망토가 몸 뒤로
+  if (propId === "cape" && !back) draw(propSprite("cape_front"), 0, 6); // 앞·옆에서는 어깨 뒤로 살짝 (다리 사이로 내려오지 않게)
   draw(charSprite(breadId, clothesHex, dir, frame, blink, sit), 0, 0);
   if (propId === "scarf") draw(propSprite("scarf"), 0, 0); // 목도리는 앞·뒤 모두 목에 두른다
   else if (propId && propId !== "cape") {
@@ -839,10 +839,12 @@ function propSprite(id) {
       const near = (g[r - 1] || [])[c] || (g[r + 1] || [])[c] || g[r][c - 1] || g[r][c + 1];
       if (near) x.fillRect(c, r, 1, 1);
     }
-  } else if (id === "camera") {
-    box(6, 12, 8, 5, "#5A5A6E"); box(6, 12, 8, 1, "#73738C");
-    box(9, 13, 3, 3, "#2E2E3C"); px(10, 14, "#9FDCC2");
-    box(5, 12, 1, 5, O); box(14, 12, 1, 5, O); box(6, 17, 8, 1, O); box(6, 11, 8, 1, O);
+  } else if (id === "camera") { // 오른손에 든 작은 카메라 (손이 카메라 아래쪽을 받친다)
+    box(13, 10, 5, 4, "#5A5A6E"); box(13, 10, 5, 1, "#73738C"); // 몸통 + 윗면
+    box(14, 9, 2, 1, "#5A5A6E");                               // 셔터 단추 자리
+    box(15, 11, 2, 2, "#2E2E3C"); px(15, 11, "#9FDCC2");         // 렌즈 + 반짝
+    box(12, 10, 1, 4, O); box(18, 10, 1, 4, O); box(13, 14, 5, 1, O);
+    box(13, 9, 1, 1, O); box(16, 9, 2, 1, O); box(14, 8, 2, 1, O);
   } else if (id === "headphone") {
     box(5, 1, 10, 1, "#F75E8E"); box(4, 2, 1, 2, "#F75E8E"); box(15, 2, 1, 2, "#F75E8E");
     box(3, 8, 3, 4, "#D13A6A"); box(14, 8, 3, 4, "#D13A6A");
@@ -864,13 +866,24 @@ function propSprite(id) {
     px(13, 10, "#73738C"); box(12, 9, 4, 1, O); box(12, 13, 4, 1, O);
   } else if (isGiftProp(id)) { // 선생님 선물 소품
     drawGiftSprite(x, id);
-  } else if (id === "cape") { // 별 망토(몸 뒤에 그림)
-    for (let r = 6; r < 17; r++) {
-      const half = 4 + Math.floor((r - 6) * 0.55);
-      box(10 - half, r, half * 2, 1, "#6C5CE7");
+  } else if (id === "cape" || id === "cape_front") { // 별 망토: 뒤에서는 어깨~다리 위, 앞·옆에서는 어깨~허리 (발에 밟히지 않게)
+    const g = newGrid();
+    const front = id === "cape_front";
+    for (let r = 7; r <= (front ? 10 : 12); r++) {
+      const half = front ? 4 + Math.ceil((r - 7) * 0.67) : 3 + Math.floor((r - 7) * 0.65);
+      for (let c = 10 - half; c < 10 + half; c++) g[r][c] = 1;
     }
-    box(10 - 4, 6, 8, 1, "#4B3FB5");
-    [[5, 9], [13, 10], [8, 13], [14, 14], [4, 14]].forEach(([c, r]) => px(c, r, "#FFE066"));
+    for (let r = 0; r < 20; r++) for (let c = 0; c < 20; c++) {
+      if (!g[r][c]) continue;
+      px(c, r, r === 7 ? "#4B3FB5" : r === (front ? 10 : 12) ? "#5546C9" : "#6C5CE7"); // 깃은 진하게, 아랫단은 살짝 그늘
+    }
+    (front ? [[4, 9], [15, 9]] : [[5, 11], [14, 11], [9, 9], [11, 11]]).forEach(([c, r]) => px(c, r, "#FFE066")); // 별
+    x.fillStyle = O;
+    for (let r = 0; r < 20; r++) for (let c = 0; c < 20; c++) {
+      if (g[r][c]) continue;
+      const near = (g[r - 1] || [])[c] || (g[r + 1] || [])[c] || g[r][c - 1] || g[r][c + 1];
+      if (near) x.fillRect(c, r, 1, 1);
+    }
   }
   propCache[id] = cv;
   return cv;
@@ -2379,7 +2392,7 @@ async function pollState() {
     if (sf.task) f.task = sf.task;
     f.link = sf.link || "";
     f.open = !!sf.open;
-    if (firstStateDone && f.open && !wasOpen) showToast(`${f.name}이(가) 새로 열렸어요!`);
+    if (firstStateDone && f.open && !wasOpen) showToast(`${josaOf(f.name, "이", "가")} 새로 열렸어요!`);
   }
 
   // 4) 공지: 시트 내용을 그대로 보여 준다. 공지가 바뀌면 다시 5초 보여 준다
@@ -2393,9 +2406,12 @@ async function pollState() {
 
 function sendMyPos(force) {
   if (!ONLINE() || !me.id) return;
+  // 마을 화면이 안 보이면(다른 탭·다른 앱·첫 화면) 보내지 않는다 → 친구 화면에서 사라진 채로
+  if (document.hidden || villageEl.classList.contains("hidden") || leavingVillage) return;
   const now = performance.now();
   const moved = Math.hypot(me.x - lastSentX, me.y - lastSentY) > 4;
-  if (!force && (!moved || now - lastSentAt < 2000)) return;
+  // 움직였으면 2초에 한 번, 가만히 있어도 40초에 한 번 "여기 있어요" (서버는 1분 30초 동안 기억한다)
+  if (!force && (moved ? now - lastSentAt < 2000 : now - lastSentAt < HERE_MS)) return;
   lastSentAt = now; lastSentX = me.x; lastSentY = me.y;
   api({
     action: "move", class: CLASS, id: me.id, name: me.name,
@@ -2406,6 +2422,39 @@ function sendMyPos(force) {
 }
 // 마지막으로 낚은 것 "f:물고기id:표시" 또는 "i:재료id:표시". 표시가 바뀌면 친구 화면에 그림이 한 번 뜬다
 let myCaught = "";
+
+/* ---------- 나가요: 친구 화면에서 바로 사라지기 ----------
+   - 창·탭을 닫거나, 새로고침하거나, 다른 탭·다른 앱으로 가면 "나가요"를 한 번 보낸다 (서버가 내 위치를 지움)
+   - 다시 마을 화면으로 돌아오면 바로 위치를 보내서 다시 보인다
+   - 신호가 못 가도(와이파이 끊김 등) 1분 30초 뒤에는 서버가 저절로 지운다 */
+const HERE_MS = 40000;
+let leavingVillage = false; // [나가기]를 눌러 첫 화면으로 가는 중
+function sendLeave() {
+  if (!ONLINE() || !me.id) return;
+  const body = JSON.stringify({ action: "leave", class: CLASS, id: me.id });
+  let sent = false;
+  try { sent = navigator.sendBeacon && navigator.sendBeacon(API_URL, new Blob([body], { type: "text/plain;charset=utf-8" })); } catch (e) { /* 무시 */ }
+  if (!sent) {
+    try { fetch(API_URL, { method: "POST", headers: { "Content-Type": "text/plain;charset=utf-8" }, body, keepalive: true }); } catch (e) { /* 무시 */ }
+  }
+  lastSentAt = 0; lastSentX = -9999; lastSentY = -9999; // 돌아오면 바로 다시 보내게
+}
+window.addEventListener("pagehide", sendLeave);
+// [나가기] → 한 번 묻고 → "나가요" 보내고 처음 화면으로 (주소의 &id=도 빼서 다음 친구가 새로 들어오게)
+setBtnIcon($("leaveBtn"), "door", "나가기");
+$("leaveBtn").addEventListener("click", () => { closeModals(); $("leaveAsk").classList.remove("hidden"); });
+$("leaveNo").addEventListener("click", () => $("leaveAsk").classList.add("hidden"));
+$("leaveYes").addEventListener("click", () => {
+  leavingVillage = true;
+  sendLeave();
+  const u = new URL(location.href);
+  u.searchParams.delete("id");
+  location.replace(u.toString());
+});
+document.addEventListener("visibilitychange", () => {
+  if (document.hidden) sendLeave();
+  else sendMyPos(true); // 돌아왔어요
+});
 
 /* ============================================================
    길찾기 (BFS)
@@ -2603,7 +2652,7 @@ function activateTarget() { // 버튼 클릭과 스페이스/엔터가 함께 �
   if (nearTarget.type === "bench") { sitDown(nearTarget.b); return; }
   const f = nearTarget.f;
   if (f.open) openFacility(f);
-  else showToast(`${f.name}은(는) 아직 준비 중이에요.`);
+  else showToast(`${josaOf(f.name, "은", "는")} 아직 준비 중이에요.`);
 }
 
 $("facilityEnterBtn").addEventListener("click", activateTarget);
@@ -2737,7 +2786,7 @@ function walkTo(c, r, facility) {
 }
 
 function clickFacility(f) {
-  if (!f.open) { showToast(`${f.name}은(는) 아직 준비 중이에요.`); return; }
+  if (!f.open) { showToast(`${josaOf(f.name, "은", "는")} 아직 준비 중이에요.`); return; }
   if (Math.hypot(me.x - f.doorX, me.y - f.doorY) < TILE * 2.2) {
     openFacility(f);
   } else {
@@ -3231,7 +3280,7 @@ function collectCore(pick, isNew) {
   me.hopUntil = performance.now() + 300; // 작게 한 번 폴짝
   spawnSparkle(dispX(me) - cam.x, dispY(me) - cam.y - 30, 10);
   playTone("gather");
-  showToast(isNew ? `${pick.name}을(를) 처음 모았어요! 도감에 들어갔어요.` : `${pick.name}이(가) 또 나왔어요.`);
+  showToast(isNew ? `${josaOf(pick.name, "을", "를")} 처음 모았어요! 도감에 들어갔어요.` : `${josaOf(pick.name, "이", "가")} 또 나왔어요.`);
   flyToDex(pick.id, isNew);
   if (!isNew) return;
   // 중요한 순간에만 칭찬 배너 (도감 5·10·15·20개, 소금빵 재료 다 모음)
@@ -4070,8 +4119,14 @@ const CREAMS = [
   { id: "berry",  name: "딸기 크림", needs: ["milk", "strawberry"], c: "#F9C6D2", hi: "#FFE2E9", sh: "#E39FB2" },
 ];
 // 3층 토핑 9가지 (3×3 칸 순서). 바다 재료(소금·해초·조개·미역·멸치)는 올리지 않아요
-const TOPPINGS = ["strawberry", "blueberry", "cherry", "apple", "banana", "coconut", "walnut", "almond", "honey"];
-const TOPPING_MAX = 3;
+const TOPPINGS = ["strawberry", "blueberry", "cherry", "apple", "banana", "coconut", "walnut", "almond", "honey", "chocolate"];
+const TOPPING_MAX = 5; // 같은 토핑을 여러 번 올려도 된다 (앞줄 3개 + 뒷줄 2개)
+// 마지막 뿌리기 (하나만 고르거나 안 뿌려도 된다). need: 도감에 있어야 하는 재료
+const DRIZZLES = [
+  { id: "sugar", name: "슈가파우더", need: "sugar" },
+  { id: "choco", name: "초코 시럽", need: "chocolate", syrup: true, c: "#5A3520", hi: "#8A5A38" },
+  { id: "honey", name: "꿀 시럽",   need: "honey",     syrup: true, c: "#F2B33D", hi: "#FFDA7A" },
+];
 
 // 받침 글자: 마지막 글자에 받침이 있으면 앞 글자, 없으면 뒤 글자
 function josaOf(word, withB, withoutB) {
@@ -4133,28 +4188,64 @@ function drawMeringue(x2, ox, oy, S, o) {
     add(5, 15, 16, 1, cr.sh, dy);  // 아래 그늘
     flush();
   }
-  // 3층: 토핑 (최대 3개, 도감 그림 그대로)
+  // 마무리 시럽 (초코·꿀): 맨 윗면에 바르고 옆으로 흘러내린다. 토핑은 그 위에 얹힌다
+  const k = o.drizzleK === undefined ? 1 : Math.max(0, Math.min(1, o.drizzleK)); // 흘러내린 정도 (0~1)
+  const syrup = DRIZZLES.find((d) => d.id === o.drizzle && d.syrup);
+  if (syrup && o.base) {
+    const top = cr ? 10 : 18, c0 = cr ? 5 : 3, w = cr ? 16 : 20;
+    const drips = cr ? [[6, 3], [9, 2], [13, 4], [17, 2], [20, 3]] : [[4, 2], [8, 3], [12, 2], [16, 3], [21, 2]];
+    const dy = cr ? o.creamDy || 0 : 0;
+    add(c0, top, w, 1, syrup.c, dy);
+    if (cr) { add(11, 8, 4, 1, syrup.c, dy); add(12, 7, 2, 1, syrup.hi, dy); }
+    for (const [c, len] of drips) {
+      const L = Math.round(len * k);
+      if (L > 0) { add(c, top + 1, 1, L, syrup.c, dy); add(c, top + L, 1, 1, syrup.hi, dy); }
+    }
+    add(c0 + 1, top, 3, 1, syrup.hi, dy); // 반짝
+    flush();
+  }
+  // 3층: 토핑 (최대 5개, 같은 토핑을 여러 번 올려도 된다. 앞줄 3개 → 뒷줄 2개, 도감 그림 그대로)
   const tops = (o.tops || []).slice(0, TOPPING_MAX);
-  const xs = tops.length === 1 ? [13] : tops.length === 2 ? [9, 17] : [8, 13, 18];
   const topR = cr ? 3 : (o.base ? 9 : 12);
-  tops.forEach((id, i) => {
-    const r = topR - (tops.length === 3 && i === 1 ? 1 : 0);
-    const dy = (o.topDy && o.topDy[id]) || 0;
-    x2.drawImage(itemSprite(id), ox + (xs[i] - 4) * S, oy + (r + dy) * S, 8 * S, 8 * S);
-  });
+  const front = tops.slice(0, 3), back = tops.slice(3);
+  const xsOf = (n) => (n === 1 ? [13] : n === 2 ? [9, 17] : [8, 13, 18]);
+  const put = (id, i, xc, r) => {
+    const dy = (o.topDy && o.topDy[i]) || 0;
+    x2.drawImage(itemSprite(id), ox + (xc - 4) * S, oy + (r + dy) * S, 8 * S, 8 * S);
+  };
+  const backXs = back.length === 1 ? [13] : [10, 16];
+  back.forEach((id, j) => put(id, 3 + j, backXs[j], topR - 3)); // 뒷줄을 먼저 (앞줄에 살짝 가려진다)
+  const fxs = xsOf(front.length);
+  front.forEach((id, i) => put(id, i, fxs[i], topR - (front.length === 3 && i === 1 ? 1 : 0)));
+  // 마무리 슈가파우더: 맨 위에 하얀 가루가 솔솔 (k만큼 늘어난다)
+  if (o.drizzle === "sugar" && o.base) {
+    const r0 = (tops.length ? topR - (back.length ? 3 : 1) : cr ? 7 : 16), r1 = cr ? 13 : 20;
+    const dots = [];
+    for (let r = r0; r <= r1; r++) for (let c = 4; c <= 21; c++) {
+      if (((c * 7 + r * 13) % 9) === 0) dots.push([c, r]);
+    }
+    // 케이크·토핑 위에만 (허공에 뜬 가루는 그리지 않는다)
+    const on = dots.filter(([c, r]) => {
+      try { return x2.getImageData(Math.floor(ox + (c + 0.5) * S), Math.floor(oy + (r + 0.5) * S), 1, 1).data[3] > 0; }
+      catch (e) { return true; }
+    });
+    x2.fillStyle = "#FFFFFF";
+    const n = Math.round(on.length * k);
+    for (let i = 0; i < n; i++) x2.fillRect(ox + on[i][0] * S, oy + on[i][1] * S, S, S);
+  }
 }
 
 // 작은 그림 (26x26): 선반·버튼·층 표시용
 const meringueCache = {};
 function meringueSprite(cream, tops, opt) {
   const o = opt || {};
-  const key = [cream || "-", (tops || []).join("+"), o.noBase ? 0 : 1, o.raw ? 0 : 1].join("_");
+  const key = [cream || "-", (tops || []).join("+"), o.noBase ? 0 : 1, o.raw ? 0 : 1, o.drizzle || "-"].join("_");
   if (meringueCache[key]) return meringueCache[key];
   const cv = document.createElement("canvas");
   cv.width = 26; cv.height = 26;
   const x = cv.getContext("2d");
   x.imageSmoothingEnabled = false;
-  drawMeringue(x, 0, o.noBase ? 6 : 0, 1, { base: !o.noBase, baked: !o.raw, cream, tops });
+  drawMeringue(x, 0, o.noBase ? 6 : 0, 1, { base: !o.noBase, baked: !o.raw, cream, tops, drizzle: o.drizzle || null });
   meringueCache[key] = cv;
   return cv;
 }
@@ -4229,7 +4320,7 @@ function drawWhiskBowl(x2, w, h, n, wobble) {
 // "1층 → 2층 → 3층" 지금 어디인지 (그림 + 글자). 지금 층은 노란 테두리, 끝난 층은 초록 ✓
 function renderTiers(s) {
   const el = $("bakeTiers");
-  const map = { weigh: 1, weighDone: 1, whisk: 1, oven: 1, tier1: 2, cream: 2, topping: 3, done: 4 };
+  const map = { weigh: 1, weighDone: 1, whisk: 1, oven: 1, tier1: 2, cream: 2, topping: 3, finish: 3, done: 4 };
   const cur = s && s.kind === "meringue" ? map[s.step] : 0;
   if (!cur) { el.classList.add("hidden"); el.innerHTML = ""; return; }
   el.classList.remove("hidden");
@@ -4353,8 +4444,10 @@ function meringueRender(s, startWeigh) {
   }
   if (s.step === "topping") {
     const n = s.tops.length;
-    bakeUI(s.note || (n ? "누르면 올라가고, 다시 누르면 내려와요." : "토핑을 3개까지 골라 올려요."), "", [
-      { text: "다 됐어요", primary: true, click: () => { s.step = "done"; bakeFinish(); bakeRender(); } },
+    bakeUI(s.note || (n >= TOPPING_MAX ? "토핑을 5개 다 올렸어요! 바꾸고 싶으면 [하나 내리기]를 눌러요."
+      : n ? "누를 때마다 하나씩 올라가요. 같은 토핑을 또 올려도 돼요."
+      : "토핑을 5개까지 올려요. 같은 토핑을 여러 번 올려도 돼요."), "", [
+      { text: "다음으로", primary: true, click: () => { s.step = "finish"; s.note = ""; bakeRender(); } },
     ]);
     const info = $("bakeInfo");
     const count = document.createElement("div");
@@ -4365,24 +4458,58 @@ function meringueRender(s, startWeigh) {
     grid.className = "top-grid";
     for (const id of TOPPINGS) {
       const got = me.items.has(id);
-      const on = s.tops.includes(id);
+      const many = s.tops.filter((v) => v === id).length; // 이 토핑을 몇 개 올렸나
       const tile = document.createElement("button");
-      tile.className = "top-tile" + (on ? " on" : "") + (got ? "" : " off");
+      tile.className = "top-tile" + (many ? " on" : "") + (got ? "" : " off");
       tile.appendChild(itemCanvas(id, !got));
       const nm = document.createElement("span");
-      nm.textContent = (on ? "✓" : "") + itemName(id);
+      nm.textContent = itemName(id);
       tile.appendChild(nm);
-      tile.setAttribute("aria-label", itemName(id) + (on ? " 올렸어요" : got ? "" : " 아직 없어요"));
+      if (many) { // 올린 개수
+        const badge = document.createElement("b");
+        badge.className = "top-badge";
+        badge.textContent = "x" + many;
+        tile.appendChild(badge);
+      }
+      tile.setAttribute("aria-label", itemName(id) + (many ? ` ${many}개 올렸어요` : got ? "" : " 아직 없어요"));
       tile.addEventListener("click", () => {
         if (!got) s.note = `${josaOf(itemName(id), "은", "는")} 아직 없어요. ${itemHint(id)}.`;
-        else if (on) { s.tops = s.tops.filter((v) => v !== id); s.note = ""; }
-        else if (s.tops.length >= TOPPING_MAX) s.note = "토핑은 3개까지 올릴 수 있어요. 하나를 내려 봐요.";
-        else { s.tops.push(id); s.topAt[id] = performance.now(); s.note = ""; playTone("gather"); }
+        else if (s.tops.length >= TOPPING_MAX) s.note = "토핑은 5개까지 올릴 수 있어요. [하나 내리기]로 내려 봐요.";
+        else { s.tops.push(id); s.topAt.push(performance.now()); s.note = ""; playTone("gather"); }
         bakeRender();
       });
       grid.appendChild(tile);
     }
+    // 마지막 줄: 하나 내리기 (마지막에 올린 토핑부터 내려온다)
+    const undo = document.createElement("button");
+    undo.className = "top-tile top-undo" + (n ? "" : " off");
+    undo.textContent = "하나 내리기";
+    undo.addEventListener("click", () => {
+      if (!n) { s.note = "아직 올린 토핑이 없어요."; bakeRender(); return; }
+      s.tops.pop(); s.topAt.pop(); s.note = "";
+      bakeRender();
+    });
+    grid.appendChild(undo);
     info.appendChild(grid);
+    return true;
+  }
+  if (s.step === "finish") { // 마지막 뿌리기: 하나를 고르거나 안 뿌려도 된다
+    const cur = DRIZZLES.find((d) => d.id === s.drizzle);
+    const btns = DRIZZLES.map((d) => {
+      const got = me.items.has(d.need);
+      return {
+        text: d.name, sprite: meringueSprite(s.cream, s.tops, { drizzle: d.id }), on: s.drizzle === d.id, off: !got,
+        click: () => {
+          if (!got) s.note = `${josaOf(d.name, "을", "를")} 뿌리려면 ${josaOf(itemName(d.need), "이", "가")} 필요해요. ${itemHint(d.need)}.`;
+          else if (s.drizzle === d.id) { s.drizzle = null; s.note = ""; }
+          else { s.drizzle = d.id; s.drizzleAt = performance.now(); s.note = ""; playTone("gather"); }
+          bakeRender();
+        },
+      };
+    });
+    btns.push({ text: "안 뿌리기", on: !s.drizzle, click: () => { s.drizzle = null; s.note = ""; bakeRender(); } });
+    btns.push({ text: "다 됐어요", primary: true, wide: true, click: () => { s.step = "done"; bakeFinish(); bakeRender(); } });
+    bakeUI(s.note || (cur ? `${josaOf(cur.name, "을", "를")} 뿌렸어요! 다시 누르면 지워져요.` : "마지막으로 하나를 골라 뿌려요. 안 뿌려도 돼요."), "", btns, "grid2");
     return true;
   }
   return false;
@@ -4417,14 +4544,16 @@ function meringueTick(s, x2, w, h, now) {
     if (k >= 1) { s.step = "tier1"; playTone("gather"); bakeRender(); }
     return true;
   }
-  if (["tier1", "cream", "topping", "done"].includes(s.step)) {
+  if (["tier1", "cream", "topping", "finish", "done"].includes(s.step)) {
     const S = 8;
-    const topDy = {};
-    for (const id of s.tops) topDy[id] = drop(s.topAt[id]);
+    const topDy = s.tops.map((_, i) => drop(s.topAt[i])); // 올린 순서대로 하나씩 내려앉는다
     drawMeringue(x2, w / 2 - 13 * S, h - 26 * S + 4, S, {
       base: true, baked: true,
       cream: s.step === "tier1" ? null : s.cream, creamDy: drop(s.creamAt),
       tops: s.step === "tier1" || s.step === "cream" ? [] : s.tops, topDy,
+      // 뿌리기: 시럽은 0.7초 동안 흘러내리고, 슈가파우더는 솔솔 늘어난다 (동작 줄이기면 바로 다 된 모습)
+      drizzle: s.step === "finish" || s.step === "done" ? s.drizzle : null,
+      drizzleK: REDUCED || !s.drizzleAt ? 1 : Math.min(1, (now - s.drizzleAt) / 700),
     });
     if (s.step === "done") { // 축하 반짝이 (움직이지 않는 별)
       x2.fillStyle = "#F6C244";
@@ -4477,7 +4606,7 @@ function openBake() {
     step: "start", kind: "ginger", recipe: makeBakeRecipe(BAKE_INGS), ingIdx: 0, grams: 0, needle: 0, touched: false, knead: 0,
     shape: null, decor: { eyes: false, buttons: false, mouth: false }, ovenT0: 0, saved: false,
     roll: 0, salt: 0,
-    whisk: 0, whiskAt: 0, cream: null, creamAt: 0, tops: [], topAt: {}, note: "", // 머랭 케이크
+    whisk: 0, whiskAt: 0, cream: null, creamAt: 0, tops: [], topAt: [], drizzle: null, drizzleAt: 0, note: "", // 머랭 케이크
   };
   $("bake").classList.remove("hidden");
   bakeRender();
@@ -4507,7 +4636,7 @@ function bakeRender() {
       { text: "머랭 케이크", sprite: meringueSprite("fresh", ["strawberry", "blueberry", "cherry"]),
         click: () => {
           s.kind = "meringue"; s.recipe = makeBakeRecipe(MERINGUE_INGS); s.step = "mCheck";
-          s.whisk = 0; s.cream = null; s.tops = []; s.topAt = {}; s.note = ""; bakeRender();
+          s.whisk = 0; s.cream = null; s.tops = []; s.topAt = []; s.drizzle = null; s.drizzleAt = 0; s.note = ""; bakeRender();
         } },
       { text: "내 선반", click: () => { s.step = "shelf"; bakeRender(); } },
     ]);
@@ -4650,7 +4779,7 @@ function bakeRender() {
         const spot = document.createElement("span");
         spot.className = "shelf-spot";
         const sprite = it.kind === "salt" ? saltBreadSprite(3, true)
-          : it.kind === "meringue" ? meringueSprite(it.cream || null, Array.isArray(it.tops) ? it.tops : [])
+          : it.kind === "meringue" ? meringueSprite(it.cream || null, Array.isArray(it.tops) ? it.tops : [], { drizzle: it.drizzle || null })
           : cookieSprite(it.shape, it.decor, true);
         spot.appendChild(shelfCanvas(sprite));
         items.appendChild(spot);
@@ -4710,7 +4839,7 @@ function bakeFinish() { // 완성: 이 컴퓨터에 한 번만 저장 (반·학�
   if (s.saved) return;
   s.saved = true;
   if (s.kind === "salt") saveBakeEntry({ kind: "salt", t: Date.now() });
-  else if (s.kind === "meringue") saveBakeEntry({ kind: "meringue", cream: s.cream, tops: s.tops.slice(), t: Date.now() }); // 쌓은 모습 그대로
+  else if (s.kind === "meringue") saveBakeEntry({ kind: "meringue", cream: s.cream, tops: s.tops.slice(), drizzle: s.drizzle || null, t: Date.now() }); // 쌓은 모습 그대로
   else saveBakeEntry({ kind: "ginger", shape: s.shape, decor: { ...s.decor }, t: Date.now() });
   spawnSparkle(canvas.width / 2, canvas.height / 2, 24);
   playTone("dex");
@@ -5225,7 +5354,7 @@ $("savePhoto").addEventListener("click", () => {
 });
 
 function closeModals() {
-  ["facilityCard", "bag", "dex", "board", "photo", "bake", "dialog", "giftCard", "basket"].forEach((id) => $(id).classList.add("hidden"));
+  ["facilityCard", "bag", "dex", "board", "photo", "bake", "dialog", "giftCard", "basket", "leaveAsk"].forEach((id) => $(id).classList.add("hidden"));
   dialog = null;
 }
 // 바깥(어두운 부분) 누르면 닫기
