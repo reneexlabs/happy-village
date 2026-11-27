@@ -791,7 +791,8 @@ function drawBread(x, breadId, clothesHex, propId, sx, sy, S, dir = "down", fram
   const draw = (img, dx, dy) => x.drawImage(img, sx + dx * scale, sy + (dy + 32 * (1 - squash)) * scale, S, S * squash);
   if (propId === "cape" && !back) draw(propSprite("cape"), 0, 6); // 앞에서는 망토가 몸 뒤로
   draw(charSprite(breadId, clothesHex, dir, frame, blink, sit), 0, 0);
-  if (propId && propId !== "cape") {
+  if (propId === "scarf") draw(propSprite("scarf"), 0, 0); // 목도리는 앞·뒤 모두 목에 두른다
+  else if (propId && propId !== "cape") {
     const headProp = HEAD_PROPS.includes(propId);
     if (!back || headProp) { // 뒤에서는 머리 소품만 보인다
       if (propId === "headphone" && dir === "side") draw(propSprite("headphone_side"), 2, -1); // 옆모습 전용 헤드폰
@@ -861,6 +862,8 @@ function propSprite(id) {
   } else if (id === "mic") {
     box(13, 13, 2, 4, "#8C8CA0"); box(12, 10, 4, 3, "#3B3B4A");
     px(13, 10, "#73738C"); box(12, 9, 4, 1, O); box(12, 13, 4, 1, O);
+  } else if (isGiftProp(id)) { // 선생님 선물 소품
+    drawGiftSprite(x, id);
   } else if (id === "cape") { // 별 망토(몸 뒤에 그림)
     for (let r = 6; r < 17; r++) {
       const half = 4 + Math.floor((r - 6) * 0.55);
@@ -914,6 +917,146 @@ function propIcon(id) {
   }
   propIconCache[id] = cv;
   return cv;
+}
+
+/* ============================================================
+   선생님 선물 소품 — 시트 마을 탭 "선물소품"에 적은 소품을 학생에게 선물한다
+   - 학생이 들어오면 선물 카드가 한 번 뜬다 (공지 → 오늘의 미션 대화 → 선물 카드, 하나씩 차례로)
+   - 한 번 받으면 계속 내 소품함에 남는다 (선물소품을 비워도). 받은 목록은 시트 친구들 탭 "선물" 칸 + 이 컴퓨터
+   - 시트로 그림을 만들 수는 없어서, 미리 그려 둔 6가지 중에서 골라 쓴다
+   ============================================================ */
+const GIFTS = [
+  { id: "santahat",  name: "산타 모자",     emoji: "🎅", head: true, ko: ["산타모자", "산타"] },
+  { id: "antlers",   name: "루돌프 머리띠", emoji: "🦌", head: true, ko: ["루돌프머리띠", "루돌프", "사슴뿔"] },
+  { id: "scarf",     name: "목도리",        emoji: "🧣", head: false, ko: ["목도리"] },
+  { id: "bdayhat",   name: "생일 고깔모자", emoji: "🎉", head: true, ko: ["생일고깔모자", "고깔모자", "생일모자"] },
+  { id: "flowerpin", name: "꽃 머리핀",     emoji: "🌸", head: true, ko: ["꽃머리핀", "머리핀", "꽃핀"] },
+  { id: "gradcap",   name: "졸업 학사모",   emoji: "🎓", head: true, ko: ["졸업학사모", "학사모"] },
+];
+// 소품함·이름표가 함께 쓰도록 기존 소품 목록 뒤에 붙인다 (선물은 시트 O/X로 잠기지 않는다)
+for (const g of GIFTS) PROPS.push({ id: g.id, name: g.name, emoji: g.emoji, unlocked: true, gift: true });
+for (const g of GIFTS) if (g.head) HEAD_PROPS.push(g.id);
+const isGiftProp = (id) => GIFTS.some((g) => g.id === id);
+
+// 시트에 적은 이름 → 선물 (띄어쓰기는 무시). 모르는 이름이면 null
+function giftFromName(name) {
+  const k = String(name || "").replace(/\s/g, "");
+  if (!k) return null;
+  return GIFTS.find((g) => g.ko.includes(k) || g.name.replace(/\s/g, "") === k || g.id === k) || null;
+}
+function parseGifts(text) {
+  return new Set(String(text || "").split(",").map((s) => s.trim()).filter(isGiftProp));
+}
+
+// 선물 소품 도트 그림 (20x20, 캐릭터 위에 겹쳐 그림. 머리 소품은 -3칸 위로 올려 그려진다)
+function drawGiftSprite(x, id) {
+  const g = newGrid(), col = Array.from({ length: 20 }, () => new Array(20).fill(null));
+  const put = (c, r, w, h, color) => {
+    for (let rr = r; rr < r + h; rr++) for (let cc = c; cc < c + w; cc++) {
+      if (rr >= 0 && rr < 20 && cc >= 0 && cc < 20) { g[rr][cc] = 1; col[rr][cc] = color; }
+    }
+  };
+  if (id === "santahat") { // 빨간 산타 모자: 오른쪽으로 접힌 끝 + 하얀 방울 + 하얀 털 띠
+    put(7, 2, 6, 1, "#D9443F"); put(6, 3, 8, 1, "#E8534C"); put(5, 4, 10, 1, "#E8534C");
+    put(9, 1, 5, 1, "#D9443F"); put(13, 2, 2, 1, "#D9443F"); put(15, 3, 1, 1, "#D9443F");
+    put(15, 4, 2, 2, "#FFFFFF");                             // 방울
+    put(4, 5, 12, 2, "#FFFFFF"); put(5, 5, 4, 1, "#F2EEE8"); // 털 띠
+    put(8, 3, 2, 1, "#F2756E");                              // 반짝
+  } else if (id === "antlers") { // 루돌프 머리띠: 갈색 띠 + 두 갈래 뿔
+    put(5, 5, 10, 1, "#8A5A33");
+    put(6, 1, 1, 4, "#B07A45"); put(4, 2, 2, 1, "#B07A45"); put(7, 0, 1, 2, "#B07A45");
+    put(13, 1, 1, 4, "#B07A45"); put(14, 2, 2, 1, "#B07A45"); put(12, 0, 1, 2, "#B07A45");
+  } else if (id === "scarf") { // 목도리: 빨강·초록 줄무늬, 앞으로 내려온 끝
+    put(5, 11, 10, 2, "#D9443F"); for (let c = 6; c < 15; c += 3) put(c, 11, 1, 2, "#58B368");
+    put(11, 13, 3, 4, "#D9443F"); put(11, 14, 3, 1, "#58B368");
+    put(11, 17, 1, 1, "#F2EEE8"); put(13, 17, 1, 1, "#F2EEE8");  // 술
+  } else if (id === "bdayhat") { // 생일 고깔모자: 분홍·노랑 줄 고깔 + 방울
+    for (let r = 1; r <= 6; r++) {
+      const half = Math.floor((r - 1) * 0.7);
+      put(10 - half, r, half * 2 + 1, 1, r % 2 ? "#F7A8C4" : "#FFE08A");
+    }
+    put(9, 0, 3, 1, "#7FC6E8"); put(10, -1, 1, 1, "#7FC6E8");
+    put(6, 7, 9, 1, "#F77C9A");
+  } else if (id === "flowerpin") { // 꽃 머리핀: 머리 오른쪽 위 작은 꽃
+    put(13, 2, 2, 1, "#F7A8C4"); put(13, 5, 2, 1, "#F7A8C4"); put(12, 3, 1, 2, "#F7A8C4"); put(15, 3, 1, 2, "#F7A8C4");
+    put(13, 3, 2, 2, "#FFE08A");
+    put(11, 5, 1, 2, "#58B368");                             // 잎
+  } else if (id === "gradcap") { // 졸업 학사모: 납작한 판 + 모자 + 노란 술
+    put(3, 2, 14, 2, "#3B3B4A"); put(4, 2, 12, 1, "#55556A");
+    put(6, 4, 8, 3, "#2E2E3C");
+    put(10, 2, 1, 1, "#F6C244"); put(15, 3, 1, 4, "#F6C244"); put(15, 7, 1, 1, "#FFE08A");
+  }
+  for (let r = 0; r < 20; r++) for (let c = 0; c < 20; c++) {
+    if (g[r][c]) { x.fillStyle = col[r][c]; x.fillRect(c, r, 1, 1); }
+  }
+  x.fillStyle = OUTLINE;
+  for (let r = 0; r < 20; r++) for (let c = 0; c < 20; c++) {
+    if (g[r][c]) continue;
+    const near = (g[r - 1] || [])[c] || (g[r + 1] || [])[c] || g[r][c - 1] || g[r][c + 1];
+    if (near) x.fillRect(c, r, 1, 1);
+  }
+}
+
+/* ---------- 선물 카드: 공지 → 오늘의 미션 대화 → 선물 카드 순서로 하나씩 ----------
+   공지 말풍선이 사라지고, 미션 대화·다른 창·칭찬 배너가 없고, 그 뒤 1.5초가 지나야 뜬다 */
+let giftOffer = null;       // 지금 시트에 켜진 선물 { gift, text }
+let entryBusyAt = 0;        // 마지막으로 무언가(대화·창·배너)가 떠 있던 때
+function applyGiftOffer(v) { // v: 서버의 village.gift ({name, text}) — 없거나 이름이 틀리면 선물 없음
+  const gift = v ? giftFromName(v.name) : null;
+  giftOffer = gift ? { gift, text: String(v.text || "").trim() || "선생님이 소품을 선물했어요!" } : null;
+}
+function missionDueNearby() {
+  let seen = "";
+  try { seen = localStorage.getItem(MISSION_SEEN_KEY) || ""; } catch (e) { /* 무시 */ }
+  return seen !== todayStr() && Math.hypot(me.x - NPCS[0].x, me.y - NPCS[0].y) < TILE * 2.4;
+}
+function updateGiftOffer(now) {
+  if (villageEl.classList.contains("hidden")) return;
+  const busy = !$("notice").classList.contains("fade") || !$("dialog").classList.contains("hidden") || dialog
+    || !noModalOpen() || praiseShowing || !$("fishCard").classList.contains("hidden");
+  if (busy) { entryBusyAt = now; return; }
+  if (!giftOffer || me.gifts.has(giftOffer.gift.id)) return;
+  if (now - entryBusyAt < 1500 || missionDueNearby()) return; // 미션 대화가 먼저
+  showGiftCard(giftOffer);
+}
+function showGiftCard(offer) {
+  const g = offer.gift;
+  // 카드를 보는 순간 받은 것으로 친다 (나중에를 눌러도 소품함에 남는다)
+  me.gifts.add(g.id);
+  saveGifts();
+  buildPropList();
+  $("giftText").textContent = offer.text;
+  $("giftName").textContent = g.name;
+  const cv = $("giftCanvas"), x = cv.getContext("2d");
+  x.imageSmoothingEnabled = false;
+  x.clearRect(0, 0, cv.width, cv.height);
+  x.drawImage(propIcon(g.id), 0, 0, cv.width, cv.height);
+  $("giftWear").onclick = () => { $("giftCard").classList.add("hidden"); wearProp(g.id); };
+  $("giftLater").onclick = () => { $("giftCard").classList.add("hidden"); showToast("소품함에 넣어 두었어요."); };
+  $("giftCard").classList.remove("hidden");
+  playTone("dex");
+}
+function saveGifts() {
+  try {
+    const saved = JSON.parse(localStorage.getItem(SAVE_KEY) || "{}");
+    saved.gifts = [...me.gifts];
+    localStorage.setItem(SAVE_KEY, JSON.stringify(saved));
+  } catch (e) { /* 무시 */ }
+  if (ONLINE() && me.id) api({ action: "gift", class: CLASS, id: me.id, gifts: [...me.gifts].join(",") }); // 받을 때 한 번만
+}
+// 서버의 선물 목록 + 이 컴퓨터에 남은 같은 학생 기록을 합친다 (새 Code.gs 배포 전에 받은 것도 잃지 않게)
+function applyServerGifts(res) {
+  let local = new Set();
+  try {
+    const saved = JSON.parse(localStorage.getItem(SAVE_KEY) || "null");
+    if (saved && saved.id === res.id) local = parseGifts((saved.gifts || []).join(","));
+  } catch (e) { /* 무시 */ }
+  const server = parseGifts(res.gifts);
+  me.gifts = new Set([...server, ...local]);
+  buildPropList();
+  if (local.size && [...local].some((id) => !server.has(id)) && ONLINE() && res.id && res.gifts !== undefined) {
+    api({ action: "gift", class: CLASS, id: res.id, gifts: [...me.gifts].join(",") }); // 이 컴퓨터에만 있던 선물을 시트로
+  }
 }
 
 /* ---------- 화면 아이콘 (이모지 대신 코드로 그린 도트 그림) ---------- */
@@ -1792,6 +1935,7 @@ const me = {
   path: [], moving: false,
   items: new Set(), // 모은 재료
   fish: new Set(),  // 낚은 물고기 (재료 도감과 따로)
+  gifts: new Set(), // 선생님께 받은 선물 소품 (한 번 받으면 계속)
 };
 
 /* ---------- 친구(가짜 접속자) ---------- */
@@ -1870,6 +2014,7 @@ function setupEntry() {
       me.prop = saved.prop || null;
       me.items = migrateItems(new Set(saved.items || []));
       me.fish = parseFish((saved.fish || []).join(","));
+      me.gifts = parseGifts((saved.gifts || []).join(","));
     }
   } catch (e) { /* 무시 */ }
 
@@ -1957,6 +2102,7 @@ async function idLogin(id) {
   me.prop = res.prop || null;
   me.items = migrateItems(new Set(String(res.items || "").split(",").filter(Boolean)));
   applyServerFish(res);
+  applyServerGifts(res);
   previewSelected.bread = me.bread;
   previewSelected.colorIdx = me.colorIdx;
   $("nickname").value = me.name;
@@ -1965,7 +2111,7 @@ async function idLogin(id) {
   me.y = sp.y;
   try {
     localStorage.setItem(SAVE_KEY, JSON.stringify({
-      id: me.id, name: me.name, bread: me.bread, colorIdx: me.colorIdx, prop: me.prop, items: [...me.items], fish: [...me.fish],
+      id: me.id, name: me.name, bread: me.bread, colorIdx: me.colorIdx, prop: me.prop, items: [...me.items], fish: [...me.fish], gifts: [...me.gifts],
     }));
   } catch (e) { /* 무시 */ }
   // 주소에서 id를 지워 둔다 (즐겨찾기해도 깨끗하게)
@@ -2078,6 +2224,7 @@ async function enterVillage() {
       me.prop = res.prop || null;
       me.items = migrateItems(new Set(String(res.items || "").split(",").filter(Boolean)));
       applyServerFish(res);
+      applyServerGifts(res);
       previewSelected.bread = me.bread;
       previewSelected.colorIdx = me.colorIdx;
     } else if (res.items) {
@@ -2090,7 +2237,7 @@ async function enterVillage() {
   try {
     localStorage.setItem(SAVE_KEY, JSON.stringify({
       id: me.id, name: me.name, bread: me.bread, colorIdx: me.colorIdx, prop: me.prop,
-      items: [...me.items], fish: [...me.fish],
+      items: [...me.items], fish: [...me.fish], gifts: [...me.gifts],
     }));
   } catch (e) { /* 무시 */ }
 
@@ -2207,6 +2354,7 @@ async function pollState() {
     if (firstStateDone && !wasBreak && VILLAGE_CFG.gatherOpen) showToast("쉬는 시간이에요! ☕");
     updateSoundBtn();
     applyOpenProps(v.openProps); // 시트의 소품 설정대로 소품 열기
+    applyGiftOffer(v.gift);      // 시트의 "선물소품" (비우면 새로 받을 수 없음. 받은 것은 그대로)
     applyChristmas(v.christmas === true); // 시트의 "크리스마스" O/X
   }
   birthdays = st.birthdays || [];
@@ -2695,7 +2843,8 @@ $("dialogGo").addEventListener("click", () => {
 
 function updateMission() {
   // 그날 처음 사무소 캐릭터 가까이 가면 대화가 저절로 시작된다
-  if (!dialog && $("dialog").classList.contains("hidden") && noModalOpen()) {
+  // (들어올 때 하나씩 차례로: 공지 말풍선이 사라진 뒤에 미션 대화, 그다음 선물 카드)
+  if (!dialog && $("dialog").classList.contains("hidden") && noModalOpen() && $("notice").classList.contains("fade")) {
     let seen = "";
     try { seen = localStorage.getItem(MISSION_SEEN_KEY) || ""; } catch (e) { /* 무시 */ }
     if (seen !== todayStr() && Math.hypot(me.x - NPCS[0].x, me.y - NPCS[0].y) < TILE * 2.4) startMissionDialog();
@@ -2722,13 +2871,14 @@ function applyOpenProps(text) {
   const open = t ? t.split(",").map((w) => PROP_KO[w]).filter(Boolean) : [];
   let newly = false, changed = false;
   for (const p of PROPS) {
+    if (p.gift) continue; // 선물 소품은 시트 O/X로 잠기지 않는다
     const u = open.includes(p.id);
     if (u !== p.unlocked) { changed = true; if (u) newly = true; p.unlocked = u; }
   }
   if (changed) {
     buildPropList();
     // 입고 있던 소품이 잠기면 원래 모습이 된다
-    if (me.prop && !open.includes(me.prop)) {
+    if (me.prop && !open.includes(me.prop) && !(isGiftProp(me.prop) && me.gifts.has(me.prop))) {
       me.prop = null;
       if (ONLINE() && me.id) { api({ action: "prop", class: CLASS, id: me.id, prop: "" }); sendMyPos(true); }
     }
@@ -2748,8 +2898,9 @@ function buildPropList() {
   const list = $("propList");
   list.innerHTML = "";
   PROPS.forEach((p) => {
+    if (p.gift && !me.gifts.has(p.id)) return; // 받은 선물만 보인다
     const btn = document.createElement("button");
-    btn.className = "prop-btn";
+    btn.className = "prop-btn" + (p.gift ? " gift" : "");
     btn.dataset.prop = p.id;
     // 소품 그림: 이모지 대신 코드로 그린 도트 그림
     const mini = document.createElement("canvas");
@@ -2779,22 +2930,28 @@ function buildPropList() {
     btn.appendChild(nameSpan);
     btn.addEventListener("click", () => {
       if (!p.unlocked) { showToast("배지를 받으면 열려요!"); return; }
-      me.prop = (me.prop === p.id) ? null : p.id; // 다시 누르면 원래 모습, 한 번에 하나만
-      try {
-        const saved = JSON.parse(localStorage.getItem(SAVE_KEY) || "{}");
-        saved.prop = me.prop;
-        localStorage.setItem(SAVE_KEY, JSON.stringify(saved));
-      } catch (e) { /* 무시 */ }
-      if (ONLINE() && me.id) {
-        api({ action: "prop", class: CLASS, id: me.id, prop: me.prop || "" }); // 시트에 저장
-        sendMyPos(true); // 친구 화면에도 바로 보이게
-      }
-      refreshBag();
-      showToast(me.prop ? `${p.name} 꾸미기 완료! ${p.emoji}` : "원래 모습이 되었어요.");
+      wearProp(me.prop === p.id ? null : p.id); // 다시 누르면 원래 모습, 한 번에 하나만
     });
     list.appendChild(btn);
   });
   refreshBag();
+}
+
+// 소품 쓰기 (null이면 원래 모습). 이 컴퓨터와 시트에 저장하고 친구 화면에도 바로
+function wearProp(id) {
+  me.prop = id || null;
+  try {
+    const saved = JSON.parse(localStorage.getItem(SAVE_KEY) || "{}");
+    saved.prop = me.prop;
+    localStorage.setItem(SAVE_KEY, JSON.stringify(saved));
+  } catch (e) { /* 무시 */ }
+  if (ONLINE() && me.id) {
+    api({ action: "prop", class: CLASS, id: me.id, prop: me.prop || "" }); // 시트에 저장
+    sendMyPos(true); // 친구 화면에도 바로 보이게
+  }
+  refreshBag();
+  const p = PROPS.find((v) => v.id === me.prop);
+  showToast(p ? `${p.name} 꾸미기 완료! ${p.emoji}` : "원래 모습이 되었어요.");
 }
 
 function refreshBag() {
@@ -5050,7 +5207,7 @@ $("savePhoto").addEventListener("click", () => {
 });
 
 function closeModals() {
-  ["facilityCard", "bag", "dex", "board", "photo", "bake", "dialog"].forEach((id) => $(id).classList.add("hidden"));
+  ["facilityCard", "bag", "dex", "board", "photo", "bake", "dialog", "giftCard", "basket"].forEach((id) => $(id).classList.add("hidden"));
   dialog = null;
 }
 // 바깥(어두운 부분) 누르면 닫기
@@ -6030,6 +6187,7 @@ function loop(now) {
   updateGroundSpots(now);  // 땅의 반짝이는 재료 자리 관리
   updateMission();         // 사무소 캐릭터 대화와 미션 도착 확인
   updatePartyBgm();        // 바구니를 다 채운 뒤 30분: 식탁 가까이 가면 파티 음악
+  updateGiftOffer(now);    // 선생님 선물 카드 (공지·미션 대화가 끝난 뒤에)
 
   ctx.clearRect(0, 0, canvas.width, canvas.height);
   drawGround(now);

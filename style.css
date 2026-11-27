@@ -969,3 +969,18 @@ h1 .ui-ico, h2 .ui-ico { width: 26px; height: 26px; vertical-align: -3px; }
   .fish-card.out { animation: praise-fade-out 300ms ease-in forwards; }
 }
 .dex-count-big { font-size: 22px; font-weight: 700; color: #5B3A1E; }
+
+/* ---------- 선생님 선물 카드 · 소품함의 선물 표시 ---------- */
+.gift-card { max-width: 380px; }
+.gift-ribbon { font-size: 44px; line-height: 1; margin-bottom: 6px; }
+.gift-text { font-size: 24px; font-weight: 800; color: #5B3A1E; word-break: keep-all; line-height: 1.4; }
+#giftCanvas { width: 120px; height: 120px; image-rendering: pixelated; display: block; margin: 12px auto 4px;
+  background: #FFF4E0; border: 3px solid #4A2E14; border-radius: 18px; }
+.gift-name { font-size: 22px; font-weight: 700; color: #7A5533; margin-bottom: 12px; }
+.gift-btns { display: flex; gap: 12px; justify-content: center; flex-wrap: wrap; }
+.prop-btn.gift { position: relative; }
+.prop-btn.gift::before { /* 선물 표시 */
+  content: "선물"; position: absolute; top: -10px; left: 50%; transform: translateX(-50%);
+  font-size: 13px; font-weight: 800; color: #FFFFFF; background: #E8534C; border: 2px solid #4A2E14;
+  border-radius: 999px; padding: 1px 8px; white-space: nowrap;
+}
