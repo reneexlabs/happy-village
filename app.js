@@ -80,13 +80,11 @@ const COLORS = [
 const PROPS = [
   { id: "ribbon",    name: "리본",     emoji: "🎀", unlocked: true },
   { id: "chefhat",   name: "셰프 모자", emoji: "✨", unlocked: true },
-  { id: "camera",    name: "카메라",   emoji: "📷", unlocked: true },
   { id: "headphone", name: "헤드폰",   emoji: "🎧", unlocked: false },
-  { id: "mic",       name: "마이크",   emoji: "🎤", unlocked: false },
   { id: "cape",      name: "별 망토",  emoji: "⭐", unlocked: false },
 ];
-// 없앤 소품: 예전에 쓰던 학생도 원래 모습으로 보인다 (시트 값은 그대로 둔다). 지금은 없음
-const REMOVED_PROPS = [];
+// 없앤 소품 (카메라·마이크): 예전에 쓰던 학생도 원래 모습으로 보인다 (시트 값은 그대로 둔다)
+const REMOVED_PROPS = ["camera", "mic"];
 const keepProp = (id) => (id && !REMOVED_PROPS.includes(id) ? id : null);
 
 /* ============================================================
@@ -786,7 +784,7 @@ function charSprite(bread, clothes, dir, frame, blink, sit) {
 
 /* ---------- 빵 캐릭터 + 소품 함께 그리기 ----------
    - 소품: 리본·모자·헤드폰은 머리에, 망토는 몸에 붙는다.
-   - 뒷모습(up)에서는 뒤에서 보이는 것만 그린다 (머리 소품·망토 O, 카메라·마이크 X). */
+   - 뒷모습(up)에서는 뒤에서 보이는 것만 그린다 (머리 소품·망토 O). */
 const HEAD_PROPS = ["ribbon", "chefhat", "headphone"];
 function drawBread(x, breadId, clothesHex, propId, sx, sy, S, dir = "down", frame = 0, blink = false, sit = false) {
   propId = keepProp(propId); // 없앤 소품은 그리지 않는다 (아직 새로고침하지 않은 친구가 보내도)
@@ -802,7 +800,7 @@ function drawBread(x, breadId, clothesHex, propId, sx, sy, S, dir = "down", fram
     const headProp = HEAD_PROPS.includes(propId);
     if (!back || headProp) { // 뒤에서는 머리 소품만 보인다
       if (propId === "headphone" && dir === "side") draw(propSprite("headphone_side"), 2, -1); // 옆모습 전용 헤드폰
-      else draw(propSprite(dir === "side" && (propId === "camera" || propId === "mic") ? propId + "_side" : propId), headProp && dir === "side" ? 2 : 0, headProp ? -3 : 4);
+      else draw(propSprite(propId), headProp && dir === "side" ? 2 : 0, headProp ? -3 : 4);
     }
   }
   if (propId === "cape" && back) draw(propSprite("cape"), 0, 6); // 뒤에서는 망토가 몸을 덮는다
@@ -856,37 +854,6 @@ function propSprite(id) {
       const near = (g[r - 1] || [])[c] || (g[r + 1] || [])[c] || g[r][c - 1] || g[r][c + 1];
       if (near) x.fillRect(c, r, 1, 1);
     }
-  } else if (id === "camera" || id === "mic" || id === "camera_side" || id === "mic_side") { // 테두리를 자동으로 둘러 도트 그림답게
-    const g = newGrid(), col = {}, thin = []; // thin: 테두리 없이 그리는 가는 끈
-    const put = (c, r, w, h, color) => {
-      for (let rr = r; rr < r + h; rr++) for (let cc = c; cc < c + w; cc++) { g[rr][cc] = 1; col[rr + "," + cc] = color; }
-    };
-    const STRAP = "#8A5A33";
-    if (id === "camera") { // 목에 건 끈 + 가슴 앞의 작은 분홍 카메라
-      thin.push([7, 8], [8, 9], [12, 8], [11, 9]);   // 목끈 (V자)
-      put(8, 10, 4, 3, "#FFF4E0");                    // 몸통 (크림색)
-      put(8, 10, 4, 1, "#F7A8C4");                    // 윗판 (분홍)
-      put(9, 11, 2, 2, "#3B3B4A"); put(9, 11, 1, 1, "#7EC8F2"); // 렌즈 + 반짝
-      put(11, 11, 1, 1, "#FFE066");                   // 플래시
-    } else if (id === "camera_side") { // 옆모습: 목끈 하나 + 앞을 보는 렌즈가 튀어나온 카메라
-      thin.push([9, 8], [10, 9]);
-      put(11, 10, 3, 3, "#FFF4E0"); put(11, 10, 3, 1, "#F7A8C4");
-      put(14, 11, 1, 1, "#3B3B4A");                   // 앞으로 나온 렌즈
-      put(13, 11, 1, 1, "#7EC8F2");
-    } else { // 마이크: 손에 쏙 들어오는 작은 크기 (은색 머리 2칸 + 분홍 띠 + 손잡이)
-      const c0 = id === "mic_side" ? 11 : 13;        // 옆모습은 앞으로 내민 손 자리
-      put(c0, 9, 2, 2, "#C9CED6"); put(c0, 9, 1, 1, "#FFFFFF"); put(c0 + 1, 10, 1, 1, "#8C8CA0");
-      put(c0, 11, 2, 1, "#F75E8E");
-      put(c0, 12, 1, 2, "#3B3B4A");
-    }
-    for (let r = 0; r < 20; r++) for (let c = 0; c < 20; c++) if (g[r][c]) px(c, r, col[r + "," + c]);
-    x.fillStyle = O;
-    for (let r = 0; r < 20; r++) for (let c = 0; c < 20; c++) {
-      if (g[r][c]) continue;
-      const near = (g[r - 1] || [])[c] || (g[r + 1] || [])[c] || g[r][c - 1] || g[r][c + 1];
-      if (near) x.fillRect(c, r, 1, 1);
-    }
-    for (const [c, r] of thin) px(c, r, STRAP);
   } else if (id === "headphone") {
     box(5, 1, 10, 1, "#F75E8E"); box(4, 2, 1, 2, "#F75E8E"); box(15, 2, 1, 2, "#F75E8E");
     box(3, 8, 3, 4, "#D13A6A"); box(14, 8, 3, 4, "#D13A6A");
@@ -3972,7 +3939,7 @@ function fishAction(mode) {
     if (!me.fishing || me.fishing.phase !== "bite") return;
     const got = pickCatch(); // 바다 재료 또는 물고기 (꽝 없음)
     if (needsRipple(got)) {
-      startRipple(got); // 처음 낚는 물고기·붕어빵 물고기: 찌 위에서 물결 맞추기 (동그라미 3개를 채우면 낚는다)
+      startRipple(got); // 물고기: 찌 위에서 물결 맞추기 (동그라미 3개를 채우면 낚는다)
     } else {
       me.fishing = null;
       myCaught = (got.item ? "i:" + got.item.id : "f:" + got.fish.id) + ":" + Date.now().toString(36).slice(-5);
@@ -3987,7 +3954,7 @@ function fishAction(mode) {
 
 
 /* ============================================================
-   물결 맞추기 — 처음 낚는 물고기와 붕어빵 물고기를 낚을 때만 (찌 위에서 바로)
+   물결 맞추기 — 물고기를 낚을 때마다 (재료는 한 번에). 찌 위에서 바로
    - 찌 둘레의 반짝이는 목표 원 + 바깥에서 천천히 작아지는 동그란 물결
    - 물결이 목표 원에 겹칠 때 화면 아무 곳이나 / 스페이스바 → "좋아요!" 동그라미 하나
    - 동그라미 3개 → 지금의 낚아채는 모션 그대로
@@ -4000,7 +3967,7 @@ let rippleGame = null; // { got, filled, misses, speed, tol, waveT0, gapUntil, m
 let myFloatPos = null; // 내 찌 자리 (화면 좌표, drawRod가 매 프레임 적는다)
 
 function needsRipple(got) {
-  return !!(!REDUCED && got.fish && (!me.fish.has(got.fish.id) || got.fish.id === "bungeo"));
+  return !!(!REDUCED && got.fish); // 물고기는 모두 (재료는 지금처럼 한 번에)
 }
 function startRipple(got) {
   const now = performance.now();
@@ -7057,7 +7024,7 @@ function loop(now) {
   updatePartyBgm();        // 바구니를 다 채운 뒤 30분: 식탁 가까이 가면 파티 음악
   updateHost(Date.now());  // 파티 동안 반죽 촌장은 식탁에서 진행 (모두에게 같은 자리)
   updateGiftOffer(now);    // 선생님 선물 카드 (공지·미션 대화가 끝난 뒤에)
-  updateRipple(now);       // 물결 맞추기 (처음 낚는 물고기·붕어빵 물고기)
+  updateRipple(now);       // 물결 맞추기 (물고기를 낚을 때)
 
   ctx.clearRect(0, 0, canvas.width, canvas.height);
   drawGround(now);
