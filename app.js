@@ -82,7 +82,19 @@ const PROPS = [
   { id: "chefhat",   name: "셰프 모자", emoji: "✨", unlocked: true },
   { id: "headphone", name: "헤드폰",   emoji: "🎧", unlocked: false },
   { id: "cape",      name: "별 망토",  emoji: "⭐", unlocked: false },
+  // 어깨 (가방) · 발 (신발): 머리 소품과 함께 쓸 수 있다
+  { id: "backpack",    name: "백팩",     emoji: "🎒", unlocked: false, slot: "bag" },
+  { id: "crossbag",    name: "크로스백", emoji: "👜", unlocked: false, slot: "bag" },
+  { id: "furboots",    name: "털부츠",   emoji: "👢", unlocked: false, slot: "shoe" },
+  { id: "ribbonshoes", name: "리본 구두", emoji: "🎀", unlocked: false, slot: "shoe" },
+  { id: "sneakers",    name: "운동화",   emoji: "👟", unlocked: false, slot: "shoe" },
 ];
+// 소품 칸: 머리(prop) · 어깨(bagProp) · 발(shoeProp). 칸마다 하나씩
+const SLOT_FIELD = { head: "prop", bag: "bagProp", shoe: "shoeProp" };
+const SLOT_NAME = { head: "머리", bag: "어깨", shoe: "발" };
+const slotOf = (id) => { const pp = PROPS.find((v) => v.id === id); return pp && pp.slot ? pp.slot : "head"; };
+// 그 칸에 맞는 소품 id만 (모르는 값·다른 칸 값은 null)
+const gearOk = (id, slot) => (id && PROPS.some((v) => v.id === id && (v.slot || "head") === slot) ? id : null);
 // 없앤 소품 (카메라·마이크): 예전에 쓰던 학생도 원래 모습으로 보인다 (시트 값은 그대로 둔다)
 const REMOVED_PROPS = ["camera", "mic"];
 const keepProp = (id) => (id && !REMOVED_PROPS.includes(id) ? id : null);
@@ -611,9 +623,16 @@ const BREAD_COLORS = {
   baguette:  { main: "#E6BE84", light: "#F4DCAE", dark: "#BD9154" },
 };
 
+// 신발 소품 색 (h: 높이 칸 수, sole: 밑창, top: 맨 윗줄, bow: 리본 구두의 리본, stripe: 운동화 줄)
+const SHOE_STYLES = {
+  furboots:    { h: 4, main: "#A0643A", top: "#FFF6EC", sole: "#6E4326" }, // 다리 4칸 높이까지 올라오는 부츠
+  ribbonshoes: { h: 2, main: "#F75E8E", sole: "#C9436E", bow: "#FFE08A" },
+  sneakers:    { h: 2, main: "#7EC8F2", sole: "#FFFFFF", stripe: "#FFFFFF" },
+};
 const spriteCache = {};
-function charSprite(bread, clothes, dir, frame, blink, sit) {
-  const key = [bread, clothes, dir, frame, blink ? 1 : 0, sit ? 1 : 0].join("_");
+// bag: 백팩·크로스백 / shoe: 신발 소품 (캐릭터 그림 안에 함께 그려서 걸음·앉기·춤을 그대로 따라간다)
+function charSprite(bread, clothes, dir, frame, blink, sit, bag, shoeId) {
+  const key = [bread, clothes, dir, frame, blink ? 1 : 0, sit ? 1 : 0, bag || "-", shoeId || "-"].join("_");
   if (spriteCache[key]) return spriteCache[key];
 
   const N = 32;
@@ -655,6 +674,34 @@ function charSprite(bread, clothes, dir, frame, blink, sit) {
     }
   }
 
+  // ---- 신발 소품 ----
+  const shoeSt = SHOE_STYLES[shoeId];
+  if (shoeSt) {
+    // c0: 다리 왼쪽 칸, rb: 발 맨 아래 줄, out: 바깥쪽으로 한 칸 넓힐 방향(-1 왼쪽, 1 오른쪽)
+    const putShoe = (c0, rb, out) => {
+      const cs = out < 0 ? c0 - 1 : c0, w = 4;
+      for (let k = 0; k < shoeSt.h; k++) {
+        const r = rb - k;
+        const col = k === 0 ? shoeSt.sole : (k === shoeSt.h - 1 && shoeSt.top) ? shoeSt.top : shoeSt.main;
+        rc(cs, r, w, 1, col);
+      }
+      if (shoeSt.bow) set(cs + (out < 0 ? 2 : 1), rb - 1, shoeSt.bow);       // 리본 구두: 발등의 작은 리본
+      if (shoeSt.stripe) set(cs + (out < 0 ? 1 : 2), rb - 1, shoeSt.stripe); // 운동화: 하얀 줄
+    };
+    if (sit) {
+      if (!back) { putShoe(12, 26, -1); putShoe(17, 26, 1); }
+    } else {
+      const dl = frame === 1 ? -1 : frame === 2 ? 1 : 0, dr = -dl;
+      if (side) { // 옆모습: 앞(오른쪽)으로 길게
+        putShoe(13 + dl, 28 + Math.min(1, Math.max(0, dl)), 1);
+        putShoe(17 + dr, 28 + Math.min(1, Math.max(0, dr)), 1);
+      } else {
+        putShoe(12, 28 + Math.max(0, dl), -1);
+        putShoe(17, 28 + Math.max(0, dr), 1);
+      }
+    }
+  }
+
   // ---- 몸(옷) + 팔 ----
   if (side) { // 옆모습은 몸통을 좁게
     rc(12, 18, 8, 7, clothes);
@@ -669,6 +716,34 @@ function charSprite(bread, clothes, dir, frame, blink, sit) {
     rc(9, 19, 2, 4, clothes); rc(21, 19, 2, 4, clothes); // 양팔
     if (!back) {
       set(9, 23, bc.main); set(10, 23, bc.main); set(21, 23, bc.main); set(22, 23, bc.main); // 손
+    }
+  }
+
+  // ---- 가방 소품 ----
+  if (bag === "backpack") { // 백팩: 뒤에서는 등에 크게, 앞에서는 어깨끈 두 줄, 옆에서는 등 뒤로 볼록
+    const M = "#F2A65A", D = "#D9853F", L = "#F7C08A", S = "#A8642E";
+    if (back) {
+      rc(11, 18, 10, 7, M); rc(11, 18, 10, 2, D);     // 가방 + 덮개
+      rc(13, 21, 6, 3, L);                              // 앞주머니
+      set(15, 20, "#FFE08A"); set(16, 20, "#FFE08A");   // 버클
+    } else if (side) {
+      rc(8, 18, 4, 7, M); rc(8, 18, 4, 2, D); rc(8, 21, 2, 3, L); // 등 뒤로 볼록
+      rc(12, 18, 1, 5, S);                                         // 어깨끈
+    } else {
+      rc(12, 18, 1, 6, S); rc(19, 18, 1, 6, S);         // 어깨끈 두 줄
+      set(12, 21, D); set(19, 21, D);                   // 끈 고리
+    }
+  } else if (bag === "crossbag") { // 크로스백: 끈이 몸을 가로지르고, 허리 옆에 작은 가방
+    const P = "#F7A8C4", D = "#D9608A", S = "#8A5A33";
+    if (side) {
+      for (let i = 0; i < 5; i++) set(14 + i, 18 + i, S);
+      rc(17, 22, 4, 3, P); rc(17, 22, 4, 1, D); set(19, 23, "#FFE08A");
+    } else if (back) {
+      for (let i = 0; i < 6; i++) set(19 - i, 18 + i, S); // 뒤에서는 반대 방향 대각선
+      rc(9, 23, 4, 3, P); rc(9, 23, 4, 1, D);
+    } else {
+      for (let i = 0; i < 6; i++) set(12 + i, 18 + i, S); // 왼쪽 어깨 → 오른쪽 허리
+      rc(18, 23, 4, 3, P); rc(18, 23, 4, 1, D); set(20, 24, "#FFE08A"); // 가방 + 덮개 + 단추
     }
   }
 
@@ -787,14 +862,15 @@ function charSprite(bread, clothes, dir, frame, blink, sit) {
    - 뒷모습(up)에서는 뒤에서 보이는 것만 그린다 (머리 소품·망토 O). */
 const HEAD_PROPS = ["ribbon", "chefhat", "headphone"];
 function drawBread(x, breadId, clothesHex, propId, sx, sy, S, dir = "down", frame = 0, blink = false, sit = false) {
-  propId = keepProp(propId); // 없앤 소품은 그리지 않는다 (아직 새로고침하지 않은 친구가 보내도)
+  const gear = propId && typeof propId === "object" ? propId : { head: propId }; // 머리 소품 하나만 줘도 된다
+  propId = keepProp(gear.head); // 없앤 소품은 그리지 않는다 (아직 새로고침하지 않은 친구가 보내도)
   const scale = S / 32;
   const back = dir === "up";
   // 앉으면 몸을 웅크려 조금 낮아진다 (발 위치는 그대로)
   const squash = sit ? 0.86 : 1;
   const draw = (img, dx, dy) => x.drawImage(img, sx + dx * scale, sy + (dy + 32 * (1 - squash)) * scale, S, S * squash);
   if (propId === "cape" && !back) draw(propSprite(dir === "side" ? "cape_side" : "cape_front"), 0, 6); // 앞에서는 어깨 뒤로 살짝, 옆에서는 등 뒤로만
-  draw(charSprite(breadId, clothesHex, dir, frame, blink, sit), 0, 0);
+  draw(charSprite(breadId, clothesHex, dir, frame, blink, sit, gearOk(gear.bag, "bag"), gearOk(gear.shoe, "shoe")), 0, 0); // 가방·신발은 캐릭터 그림 안에
   if (propId === "scarf") draw(propSprite("scarf"), 0, 0); // 목도리는 앞·뒤 모두 목에 두른다
   else if (propId && propId !== "cape") {
     const headProp = HEAD_PROPS.includes(propId);
@@ -899,10 +975,49 @@ function propSprite(id) {
   return cv;
 }
 
+/* ---------- 어깨·발 소품 아이콘 (20x20, 테두리 자동) ---------- */
+const GEAR_ICON = {
+  backpack(put) { // 주황 백팩: 손잡이 + 덮개 + 앞주머니
+    put(8, 3, 4, 1, "#A8642E"); put(5, 5, 10, 11, "#F2A65A"); put(5, 5, 10, 3, "#D9853F");
+    put(7, 10, 6, 4, "#F7C08A"); put(9, 8, 2, 1, "#FFE08A");
+  },
+  crossbag(put) { // 분홍 크로스백: 둥근 끈 + 작은 가방 + 단추
+    put(5, 3, 10, 1, "#8A5A33"); put(4, 4, 1, 6, "#8A5A33"); put(15, 4, 1, 6, "#8A5A33");
+    put(4, 10, 12, 6, "#F7A8C4"); put(4, 10, 12, 2, "#D9608A"); put(9, 12, 2, 1, "#FFE08A");
+  },
+  furboots(put) { // 털부츠 한 켤레
+    for (const c0 of [2, 11]) { put(c0, 4, 5, 2, "#FFF6EC"); put(c0, 6, 5, 7, "#A0643A"); put(c0, 13, 7, 2, "#A0643A"); put(c0, 15, 7, 1, "#6E4326"); }
+  },
+  ribbonshoes(put) { // 분홍 리본 구두 한 켤레
+    for (const c0 of [1, 11]) { put(c0, 10, 8, 4, "#F75E8E"); put(c0, 14, 8, 1, "#C9436E"); put(c0 + 3, 9, 3, 2, "#FFE08A"); }
+  },
+  sneakers(put) { // 하늘색 운동화 한 켤레 + 하얀 밑창·줄
+    for (const c0 of [1, 11]) { put(c0, 9, 7, 5, "#7EC8F2"); put(c0, 14, 8, 2, "#FFFFFF"); put(c0 + 2, 10, 3, 1, "#FFFFFF"); }
+  },
+};
+function gearIcon(id) {
+  const cv = document.createElement("canvas");
+  cv.width = 20; cv.height = 20;
+  const x = cv.getContext("2d");
+  const g = newGrid(), col = {};
+  const put = (c, r, w, h, color) => {
+    for (let rr = r; rr < r + h; rr++) for (let cc = c; cc < c + w; cc++) if (rr >= 0 && rr < 20 && cc >= 0 && cc < 20) { g[rr][cc] = 1; col[rr + "," + cc] = color; }
+  };
+  GEAR_ICON[id](put);
+  for (let r = 0; r < 20; r++) for (let c = 0; c < 20; c++) if (g[r][c]) { x.fillStyle = col[r + "," + c]; x.fillRect(c, r, 1, 1); }
+  x.fillStyle = OUTLINE;
+  for (let r = 0; r < 20; r++) for (let c = 0; c < 20; c++) {
+    if (g[r][c]) continue;
+    if ((g[r - 1] || [])[c] || (g[r + 1] || [])[c] || g[r][c - 1] || g[r][c + 1]) x.fillRect(c, r, 1, 1);
+  }
+  return cv;
+}
+
 /* ---------- 소품 아이콘 (소품함, 이름표용: 그림을 가운데로 모아 그린다) ---------- */
 const propIconCache = {};
 function propIcon(id) {
   if (propIconCache[id]) return propIconCache[id];
+  if (GEAR_ICON[id]) { propIconCache[id] = gearIcon(id); return propIconCache[id]; }
   if (id === "headphone") {
     // 헤드폰은 머리에 쓴 그림이 작아지면 점처럼 보여서, 아이콘 전용 그림을 따로 그린다
     const cv2 = document.createElement("canvas");
@@ -2045,6 +2160,8 @@ function setupEntry() {
       previewSelected.bread = saved.bread || "bun";
       previewSelected.colorIdx = saved.colorIdx ?? 0;
       me.prop = keepProp(saved.prop);
+      me.bagProp = gearOk(saved.bagProp, "bag");
+      me.shoeProp = gearOk(saved.shoeProp, "shoe");
       me.items = migrateItems(new Set(saved.items || []));
       me.fish = parseFish((saved.fish || []).join(","));
       me.gifts = parseGifts((saved.gifts || []).join(","));
@@ -2133,6 +2250,7 @@ async function idLogin(id) {
   me.bread = res.bread || "bun";
   me.colorIdx = Math.max(0, Math.min(5, Number(res.color) || 0));
   me.prop = keepProp(res.prop);
+  applyServerGear(res);
   me.items = migrateItems(new Set(String(res.items || "").split(",").filter(Boolean)));
   applyServerFish(res);
   applyServerGifts(res);
@@ -2146,7 +2264,7 @@ async function idLogin(id) {
   try {
     localStorage.setItem(SAVE_KEY, JSON.stringify({
       id: me.id, name: me.name, bread: me.bread, colorIdx: me.colorIdx, prop: me.prop, items: [...me.items], fish: [...me.fish], gifts: [...me.gifts],
-      bag: { ...me.bag }, breadDex: encodeBread(),
+      bag: { ...me.bag }, breadDex: encodeBread(), bagProp: me.bagProp, shoeProp: me.shoeProp,
     }));
   } catch (e) { /* 무시 */ }
   // 주소에서 id를 지워 둔다 (즐겨찾기해도 깨끗하게)
@@ -2257,6 +2375,7 @@ async function enterVillage() {
       me.bread = res.bread || "bun";
       me.colorIdx = Math.max(0, Math.min(5, Number(res.color) || 0));
       me.prop = keepProp(res.prop);
+      applyServerGear(res);
       me.items = migrateItems(new Set(String(res.items || "").split(",").filter(Boolean)));
       applyServerFish(res);
       applyServerGifts(res);
@@ -2274,7 +2393,7 @@ async function enterVillage() {
     localStorage.setItem(SAVE_KEY, JSON.stringify({
       id: me.id, name: me.name, bread: me.bread, colorIdx: me.colorIdx, prop: me.prop,
       items: [...me.items], fish: [...me.fish], gifts: [...me.gifts],
-      bag: { ...me.bag }, breadDex: encodeBread(),
+      bag: { ...me.bag }, breadDex: encodeBread(), bagProp: me.bagProp, shoeProp: me.shoeProp,
     }));
   } catch (e) { /* 무시 */ }
 
@@ -2369,6 +2488,8 @@ async function pollState() {
     fr.bread = p.bread || "bun";
     fr.colorIdx = Math.max(0, Math.min(5, Number(p.color) || 0));
     fr.prop = keepProp(p.prop);
+    fr.bagProp = gearOk(p.bagp, "bag");   // 어깨 (백팩·크로스백)
+    fr.shoeProp = gearOk(p.shoe, "shoe"); // 발 (신발)
     fr.tx = p.x; fr.ty = p.y;
     // 친구 낚시: 낚싯대·찌, 새로 낚은 것 (처음 본 기록은 띄우지 않는다. 늦게 받아도 표시가 바뀌었으면 띄운다)
     fr.rod = Number(p.rod) === 1;
@@ -2439,7 +2560,7 @@ function sendMyPos(force) {
   lastSentAt = now; lastSentX = me.x; lastSentY = me.y;
   api({
     action: "move", class: CLASS, id: me.id, name: me.name,
-    bread: me.bread, color: me.colorIdx, prop: me.prop || "",
+    bread: me.bread, color: me.colorIdx, prop: me.prop || "", bagp: me.bagProp || "", shoe: me.shoeProp || "",
     x: Math.round(me.x), y: Math.round(me.y),
     rod: me.fishing ? 1 : 0, caught: myCaught, // 친구 화면에 낚싯대·찌, 낚은 것 그림
   });
@@ -2968,7 +3089,8 @@ function updateMission() {
 /* ---------- 시트의 소품 설정(소품리본~소품별망토 O/X)으로 소품 열고 닫기 ----------
    서버가 O인 소품을 "리본,셰프모자"처럼 쉼표 목록으로 보내 준다.
    비어 있으면 전부 잠김, null/undefined(옛 서버)면 그대로 둔다. */
-const PROP_KO = { 리본: "ribbon", 셰프모자: "chefhat", 카메라: "camera", 헤드폰: "headphone", 마이크: "mic", 별망토: "cape" };
+const PROP_KO = { 리본: "ribbon", 셰프모자: "chefhat", 카메라: "camera", 헤드폰: "headphone", 마이크: "mic", 별망토: "cape",
+  백팩: "backpack", 크로스백: "crossbag", 털부츠: "furboots", 리본구두: "ribbonshoes", 운동화: "sneakers" };
 let propsApplied = false; // 들어와서 처음 받은 값에는 알림을 띄우지 않는다
 
 function applyOpenProps(text) {
@@ -2983,11 +3105,13 @@ function applyOpenProps(text) {
   }
   if (changed) {
     buildPropList();
-    // 입고 있던 소품이 잠기면 원래 모습이 된다
-    if (me.prop && !open.includes(me.prop) && !(isGiftProp(me.prop) && me.gifts.has(me.prop))) {
-      me.prop = null;
-      if (ONLINE() && me.id) { api({ action: "prop", class: CLASS, id: me.id, prop: "" }); sendMyPos(true); }
+    // 쓰고 있던 소품이 잠기면 그 칸만 벗는다 (선물 소품은 그대로)
+    let off = false;
+    for (const field of Object.values(SLOT_FIELD)) {
+      const id = me[field];
+      if (id && !open.includes(id) && !(isGiftProp(id) && me.gifts.has(id))) { me[field] = null; off = true; }
     }
+    if (off) { saveGearLocal(); sendGear(); }
     if (propsApplied && newly) showToast("새 소품이 열렸어요! 🎁");
   }
   propsApplied = true;
@@ -3001,10 +3125,24 @@ function setupBag() {
 
 // 소품 목록 그리기 (열린 소품이 바뀌면 다시 그린다)
 function buildPropList() {
-  const list = $("propList");
-  list.innerHTML = "";
+  const root = $("propList");
+  root.innerHTML = "";
+  const lists = {};
+  for (const slot of ["head", "bag", "shoe"]) { // 칸마다 제목 + 버튼 줄
+    const sec = document.createElement("div");
+    sec.className = "prop-section";
+    const h = document.createElement("h3");
+    h.className = "prop-sec-title";
+    h.textContent = SLOT_NAME[slot];
+    const grid = document.createElement("div");
+    grid.className = "prop-list";
+    sec.append(h, grid);
+    root.appendChild(sec);
+    lists[slot] = grid;
+  }
   PROPS.forEach((p) => {
     if (p.gift && !me.gifts.has(p.id)) return; // 받은 선물만 보인다
+    const slot = p.slot || "head", list = lists[slot];
     const btn = document.createElement("button");
     btn.className = "prop-btn" + (p.gift ? " gift" : "");
     btn.dataset.prop = p.id;
@@ -3036,33 +3174,54 @@ function buildPropList() {
     btn.appendChild(nameSpan);
     btn.addEventListener("click", () => {
       if (!p.unlocked) { showToast("배지를 받으면 열려요!"); return; }
-      wearProp(me.prop === p.id ? null : p.id); // 다시 누르면 원래 모습, 한 번에 하나만
+      wearProp(me[SLOT_FIELD[slot]] === p.id ? null : p.id, slot); // 다시 누르면 그 칸만 벗는다 (칸마다 하나씩)
     });
     list.appendChild(btn);
   });
   refreshBag();
 }
 
-// 소품 쓰기 (null이면 원래 모습). 이 컴퓨터와 시트에 저장하고 친구 화면에도 바로
-function wearProp(id) {
-  me.prop = id || null;
+// 소품 쓰기: 그 칸(머리·어깨·발)에만 (null이면 그 칸을 벗는다). 이 컴퓨터와 시트에 저장하고 친구 화면에도 바로
+function wearProp(id, slot) {
+  slot = slot || (id ? slotOf(id) : "head");
+  const field = SLOT_FIELD[slot];
+  const before = PROPS.find((v) => v.id === me[field]);
+  me[field] = id || null;
+  saveGearLocal();
+  sendGear();
+  refreshBag();
+  const p = PROPS.find((v) => v.id === me[field]);
+  showToast(p ? `${p.name} 꾸미기 완료! ${p.emoji}` : before ? `${josaOf(before.name, "을", "를")} 벗었어요.` : "원래 모습이 되었어요.");
+}
+function saveGearLocal() {
   try {
     const saved = JSON.parse(localStorage.getItem(SAVE_KEY) || "{}");
-    saved.prop = me.prop;
+    saved.prop = me.prop; saved.bagProp = me.bagProp; saved.shoeProp = me.shoeProp;
     localStorage.setItem(SAVE_KEY, JSON.stringify(saved));
   } catch (e) { /* 무시 */ }
-  if (ONLINE() && me.id) {
-    api({ action: "prop", class: CLASS, id: me.id, prop: me.prop || "" }); // 시트에 저장
-    sendMyPos(true); // 친구 화면에도 바로 보이게
+}
+// 세 칸을 시트에 (지금 쓰는 소품 저장 요청 그대로, 칸 두 개를 더 실어서) + 친구 화면에 바로
+function sendGear() {
+  if (!ONLINE() || !me.id) return;
+  api({ action: "prop", class: CLASS, id: me.id, prop: me.prop || "", bagp: me.bagProp || "", shoe: me.shoeProp || "" });
+  sendMyPos(true);
+}
+// 들어올 때: 시트의 어깨·발 칸 (새 Code.gs 전이면 이 컴퓨터에 남은 같은 학생 기록)
+function applyServerGear(res) {
+  if (res.bagProp !== undefined || res.shoeProp !== undefined) {
+    me.bagProp = gearOk(res.bagProp, "bag");
+    me.shoeProp = gearOk(res.shoeProp, "shoe");
+    return;
   }
-  refreshBag();
-  const p = PROPS.find((v) => v.id === me.prop);
-  showToast(p ? `${p.name} 꾸미기 완료! ${p.emoji}` : "원래 모습이 되었어요.");
+  let saved = null;
+  try { const v = JSON.parse(localStorage.getItem(SAVE_KEY) || "null"); if (v && v.id === res.id) saved = v; } catch (e) { /* 무시 */ }
+  me.bagProp = saved ? gearOk(saved.bagProp, "bag") : null;
+  me.shoeProp = saved ? gearOk(saved.shoeProp, "shoe") : null;
 }
 
 function refreshBag() {
   document.querySelectorAll(".prop-btn").forEach((btn) => {
-    btn.classList.toggle("wearing", btn.dataset.prop === me.prop);
+    btn.classList.toggle("wearing", btn.dataset.prop === me[SLOT_FIELD[slotOf(btn.dataset.prop)]]);
   });
 }
 
@@ -4108,7 +4267,7 @@ const SALT_INGS = [         // 소금빵 계량 재료
 // 소금빵에 필요한 도감 재료 (구워도 없어지지 않는다)
 const SALT_NEEDS = [
   { id: "wheat",  name: "밀",  ga: "이", hint: "나무를 흔들어 봐요" },
-  { id: "butter", name: "버터", ga: "가", hint: "땅의 반짝이를 주워 봐요" },
+  { id: "butter", name: "버터", ga: "가", hint: "땅에서 반짝이는 곳을 찾아봐요" },
   { id: "milk",   name: "우유", ga: "가", hint: "젖소에게 가 봐요" },
   { id: "egg",    name: "달걀", ga: "이", hint: "닭에게 가 봐요" },
   { id: "salt",   name: "소금", ga: "이", hint: "바다에서 낚시해 봐요" },
@@ -4437,7 +4596,7 @@ const MERINGUE_INGS = [      // 머랭 계량 재료
 ];
 const MERINGUE_NEEDS = [     // 1층 머랭에 필요한 도감 재료
   { id: "egg",   name: "달걀", ga: "이", hint: "닭에게 가 봐요" },
-  { id: "sugar", name: "설탕", ga: "이", hint: "땅의 반짝이를 주워 봐요" },
+  { id: "sugar", name: "설탕", ga: "이", hint: "땅에서 반짝이는 곳을 찾아봐요" },
 ];
 // 2층 크림 4가지 (도감 재료로만)
 const CREAMS = [
@@ -4470,7 +4629,7 @@ function itemHint(id) {
   if (!it) return "마을을 둘러봐요";
   if (it.from === "tree") return "나무를 흔들어 봐요";
   if (it.from === "sea") return "바다에서 낚시해 봐요";
-  return "땅의 반짝이를 주워 봐요";
+  return "땅에서 반짝이는 곳을 찾아봐요";
 }
 const itemName = (id) => (ITEMS.find((v) => v.id === id) || { name: id }).name;
 
@@ -6840,7 +6999,7 @@ function drawCharacter(ch, isMe, now) {
   const sx = x - S / 2, sy = y - S + 10;
   ctx.save();
   if (dir === "left") { ctx.translate(x * 2, 0); ctx.scale(-1, 1); } // 왼쪽은 오른쪽을 뒤집는다
-  drawBread(ctx, ch.bread, clothes, ch.prop, sx, sy, S, sDir, frame, blink, sitting);
+  drawBread(ctx, ch.bread, clothes, { head: ch.prop, bag: ch.bagProp, shoe: ch.shoeProp }, sx, sy, S, sDir, frame, blink, sitting);
   ctx.restore();
 
   // 낚시 자리에서 던졌으면 아래(바다 쪽)로 드리운 낚싯대와 찌

@@ -1040,3 +1040,9 @@ h1 .ui-ico, h2 .ui-ico { width: 26px; height: 26px; vertical-align: -3px; }
 .fish-cell { padding: 6px 4px 4px; }
 /* 문 앞·의자·촌장 [이야기하기]·줍기 버튼: 누르기 쉽게 64px 이상, 글씨 22px */
 .enter-btn { min-height: 64px; font-size: 22px; display: inline-flex; align-items: center; justify-content: center; gap: 6px; }
+
+/* ---------- 소품함: 머리 · 어깨 · 발 세 줄 ---------- */
+#bag .bag-sub { font-size: 22px; line-height: 1.4; word-break: keep-all; }
+.prop-section { margin-bottom: 12px; }
+.prop-sec-title { font-size: 22px; font-weight: 800; color: #5B3A1E; text-align: left; margin: 4px 2px 6px; }
+#propList { display: block; max-height: 56vh; overflow-y: auto; overflow-x: hidden; } /* 바깥은 세로로 세 줄, 줄 안에서만 바둑판 */
