@@ -1038,3 +1038,5 @@ h1 .ui-ico, h2 .ui-ico { width: 26px; height: 26px; vertical-align: -3px; }
 }
 /* 물고기·빵 도감 칸: 창보다 몇 px 길어서 조금만 움직이는 스크롤이 생기지 않게 여백을 살짝 줄임 */
 .fish-cell { padding: 6px 4px 4px; }
+/* 문 앞·의자·촌장 [이야기하기]·줍기 버튼: 누르기 쉽게 64px 이상, 글씨 22px */
+.enter-btn { min-height: 64px; font-size: 22px; display: inline-flex; align-items: center; justify-content: center; gap: 6px; }

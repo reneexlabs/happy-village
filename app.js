@@ -1129,6 +1129,11 @@ function uiIcon(name) {
     box(10, 8, 1, 2, "#F6C244"); // 손잡이
     box(3, 3, 1, 11, O); box(12, 3, 1, 11, O); box(4, 2, 1, 1, O); box(11, 2, 1, 1, O);
     box(5, 1, 6, 1, O); box(4, 14, 8, 1, O);
+  } else if (name === "talk") { // 이야기하기: 말풍선 + 점 세 개
+    box(2, 3, 12, 8, "#FFFFFF");
+    box(2, 2, 12, 1, O); box(2, 11, 12, 1, O); box(1, 3, 1, 8, O); box(14, 3, 1, 8, O);
+    box(4, 12, 2, 1, "#FFFFFF"); box(4, 12, 1, 2, O); box(6, 12, 1, 1, O); box(5, 13, 1, 1, O); // 꼬리
+    box(4, 6, 2, 2, "#8A5A33"); box(7, 6, 2, 2, "#8A5A33"); box(10, 6, 2, 2, "#8A5A33");
   } else if (name === "pin") { // 게시판 압정
     box(5, 3, 6, 5, "#E8453C"); box(4, 4, 8, 3, "#E8453C");
     box(5, 4, 2, 1, "#F58A7E");
@@ -2668,8 +2673,16 @@ function updateEnterButton() {
   const bLimit = (nearTarget && nearTarget.b === bestB) ? TILE * 2.2 : TILE * 1.8;
   const fOk = bestF && dF <= fLimit;
   const bOk = bestB && dB <= bLimit;
+  // 반죽 촌장 (파티 중에는 식탁 옆으로 옮겨 가도 따라간다)
+  const npc = NPCS[0], dN = Math.hypot(me.x - npc.x, me.y - npc.y);
+  const nOk = dN <= ((nearTarget && nearTarget.type === "npc") ? TILE * 2.6 : TILE * 2.2);
   let next = null;
-  if (bOk && (!fOk || dB <= dF)) {
+  if (nOk && (!bOk || dN <= dB) && (!fOk || dN <= dF)) {
+    // 버튼은 촌장 발밑에 (머리 위 말풍선·"!"를 가리지 않게)
+    const label = hostTip && performance.now() < hostTip.until ? "미션 다시 듣기" : "이야기하기";
+    next = { type: "npc", n: npc, label, x: npc.x, topY: npc.y + 78 };
+  }
+  else if (bOk && (!fOk || dB <= dF)) {
     // 버튼은 나와 가장 가까운 자리 위에 뜬다 (긴 의자에서 멀리 뜨지 않게)
     let bx = benchCX(bestB), bd = Infinity;
     for (const s of bestB.seats) { const d = Math.abs(me.x - s.x); if (d < bd) { bd = d; bx = s.x; } }
@@ -2681,11 +2694,12 @@ function updateEnterButton() {
     return;
   }
   const changed = !nearTarget || nearTarget.type !== next.type ||
-    nearTarget.f !== next.f || nearTarget.b !== next.b || btn.classList.contains("hidden");
+    nearTarget.f !== next.f || nearTarget.b !== next.b || nearTarget.label !== next.label || btn.classList.contains("hidden");
   nearTarget = next;
   nearFacility = next.type === "facility" ? next.f : null;
   if (changed) {
-    if (next.type === "bench") setBtnIcon(btn, "cup", "앉기");
+    if (next.type === "npc") setBtnIcon(btn, "talk", next.label);
+    else if (next.type === "bench") setBtnIcon(btn, "cup", "앉기");
     else if (!next.f.open) setBtnIcon(btn, "cone", "준비 중이에요");
     else if (next.f.board) setBtnIcon(btn, "pin", "게시판 보기");
     else setBtnIcon(btn, "door", "들어가기");
@@ -2699,6 +2713,7 @@ function updateEnterButton() {
 function activateTarget() { // 버튼 클릭과 스페이스/엔터가 함께 쓴다
   if (!nearTarget) return;
   if (nearTarget.type === "bench") { sitDown(nearTarget.b); return; }
+  if (nearTarget.type === "npc") { openNpc(nearTarget.n); return; }
   const f = nearTarget.f;
   if (f.open) openFacility(f);
   else showToast(`${josaOf(f.name, "은", "는")} 아직 준비 중이에요.`);
@@ -2861,7 +2876,11 @@ function openNpc(npc) {
   pendingNpc = null;
   let seen = "";
   try { seen = localStorage.getItem(MISSION_SEEN_KEY) || ""; } catch (e) { /* 무시 */ }
-  if (seen === todayStr()) { showHostTip(); return; } // 오늘 미션은 들었으니 도움말 한 줄
+  if (seen === todayStr()) {
+    if (hostTip && performance.now() < hostTip.until) { hostTip = null; startMissionDialog(); return; } // 말풍선이 떠 있을 때 또 누르면 미션 다시 듣기
+    showHostTip(); // 오늘 미션은 들었으니 도움말 한 줄
+    return;
+  }
   startMissionDialog();
 }
 
