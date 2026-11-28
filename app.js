@@ -863,6 +863,10 @@ function charSprite(bread, clothes, dir, frame, blink, sit, bag, shoeId) {
    - 소품: 리본·모자·헤드폰은 머리에, 망토는 몸에 붙는다.
    - 뒷모습(up)에서는 뒤에서 보이는 것만 그린다 (머리 소품·망토 O). */
 const HEAD_PROPS = ["ribbon", "chefhat", "headphone"];
+const HAT_LIFT = { bdayhat: -6 }; // 머리 소품을 그리는 높이 (기본 -3). 고깔모자는 머리 꼭대기에 얹히게 더 위로
+// 머리 위 그림을 고친 소품도 이름표 옆 아이콘은 예전 그림 그대로 쓴다
+const ICON_SRC = { bdayhat: "bdayhat_icon", flowerpin: "flowerpin_icon" };
+const ICON_ONLY = { bdayhat_icon: 1, flowerpin_icon: 1 };
 function drawBread(x, breadId, clothesHex, propId, sx, sy, S, dir = "down", frame = 0, blink = false, sit = false) {
   const gear = propId && typeof propId === "object" ? propId : { head: propId }; // 머리 소품 하나만 줘도 된다
   propId = keepProp(gear.head); // 없앤 소품은 그리지 않는다 (아직 새로고침하지 않은 친구가 보내도)
@@ -881,7 +885,7 @@ function drawBread(x, breadId, clothesHex, propId, sx, sy, S, dir = "down", fram
     const headProp = HEAD_PROPS.includes(propId);
     if (!back || headProp) { // 뒤에서는 머리 소품만 보인다
       if (propId === "headphone" && dir === "side") draw(propSprite("headphone_side"), 2, -1); // 옆모습 전용 헤드폰
-      else draw(propSprite(propId), headProp && dir === "side" ? 2 : 0, headProp ? -3 : 4);
+      else draw(propSprite(propId), headProp && dir === "side" ? 2 : 0, headProp ? (HAT_LIFT[propId] || -3) : 4);
     }
   }
   if (capeOn && back) draw(propSprite("cape"), 0, 6); // 뒤에서는 망토가 몸을 덮는다
@@ -951,7 +955,7 @@ function propSprite(id) {
     box(6, 1, 3, 1, O); box(5, 2, 1, 1, O); box(9, 2, 1, 1, O);
     box(6, 3, 1, 4, O); box(8, 3, 1, 4, O);
     box(5, 7, 1, 4, O); box(9, 7, 1, 4, O); box(6, 11, 3, 1, O);
-  } else if (isGiftProp(id)) { // 선생님 선물 소품
+  } else if (isGiftProp(id) || ICON_ONLY[id]) { // 선생님 선물 소품 (아이콘 전용 예전 그림 포함)
     drawGiftSprite(x, id);
   } else if (id === "cape" || id === "cape_front" || id === "cape_side") { // 별 망토: 뒤에서는 어깨~다리 위, 앞에서는 어깨~허리, 옆에서는 등 뒤로 (발에 밟히지 않게)
     const g = newGrid();
@@ -1041,7 +1045,7 @@ function propIcon(id) {
     propIconCache[id] = cv2;
     return cv2;
   }
-  const src = propSprite(id);
+  const src = propSprite(ICON_SRC[id] || id); // 이름표·소품함 아이콘은 예전 그림 그대로 (머리 위 그림만 고쳤다)
   const d = src.getContext("2d").getImageData(0, 0, 20, 20).data;
   let minX = 20, minY = 20, maxX = -1, maxY = -1;
   for (let yy = 0; yy < 20; yy++) for (let xx = 0; xx < 20; xx++) {
@@ -1113,17 +1117,28 @@ function drawGiftSprite(x, id) {
     put(5, 11, 10, 2, "#D9443F"); for (let c = 6; c < 15; c += 3) put(c, 11, 1, 2, "#58B368");
     put(11, 13, 3, 4, "#D9443F"); put(11, 14, 3, 1, "#58B368");
     put(11, 17, 1, 1, "#F2EEE8"); put(13, 17, 1, 1, "#F2EEE8");  // 술
-  } else if (id === "bdayhat") { // 생일 고깔모자: 분홍·노랑 줄 고깔 + 방울
+  } else if (id === "bdayhat") { // 생일 고깔모자: 머리 꼭대기에 얹은 작은 고깔, 오른쪽으로 살짝 기울임 (더 위에 그린다)
+    put(13, 1, 1, 1, "#7FC6E8");                         // 방울
+    put(12, 2, 1, 1, "#F7A8C4");                         // 꼭대기
+    put(11, 3, 2, 1, "#FFE08A");
+    put(10, 4, 3, 1, "#F7A8C4");
+    put(9, 5, 4, 1, "#FFE08A");
+    put(8, 6, 6, 1, "#F77C9A");                          // 머리에 닿는 띠 (머리 폭보다 좁게)
+  } else if (id === "bdayhat_icon") { // (아이콘 전용) 예전 생일 고깔모자 그림
     for (let r = 1; r <= 6; r++) {
       const half = Math.floor((r - 1) * 0.7);
       put(10 - half, r, half * 2 + 1, 1, r % 2 ? "#F7A8C4" : "#FFE08A");
     }
     put(9, 0, 3, 1, "#7FC6E8"); put(10, -1, 1, 1, "#7FC6E8");
     put(6, 7, 9, 1, "#F77C9A");
-  } else if (id === "flowerpin") { // 꽃 머리핀: 머리 오른쪽 위 작은 꽃
+  } else if (id === "flowerpin_icon") { // (아이콘 전용) 예전 꽃 머리핀 그림
     put(13, 2, 2, 1, "#F7A8C4"); put(13, 5, 2, 1, "#F7A8C4"); put(12, 3, 1, 2, "#F7A8C4"); put(15, 3, 1, 2, "#F7A8C4");
     put(13, 3, 2, 2, "#FFE08A");
-    put(11, 5, 1, 2, "#58B368");                             // 잎
+    put(11, 5, 1, 2, "#58B368");
+  } else if (id === "flowerpin") { // 꽃 머리핀: 머리 오른쪽 위 작은 꽃 (잎까지 눈보다 한참 위에)
+    put(13, 1, 2, 1, "#F7A8C4"); put(13, 4, 2, 1, "#F7A8C4"); put(12, 2, 1, 2, "#F7A8C4"); put(15, 2, 1, 2, "#F7A8C4");
+    put(13, 2, 2, 2, "#FFE08A");
+    put(11, 3, 1, 2, "#58B368");                             // 잎
   } else if (id === "gradcap") { // 졸업 학사모: 납작한 판 + 모자 + 노란 술
     put(3, 2, 14, 2, "#3B3B4A"); put(4, 2, 12, 1, "#55556A");
     put(6, 4, 8, 3, "#2E2E3C");
